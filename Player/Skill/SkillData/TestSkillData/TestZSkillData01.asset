@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: da86b2a677f632c4d982ab72d87ddac5, type: 3}
+  m_Name: TestZSkillData01
+  m_EditorClassIdentifier: 
+  skillName: "\uAC70\uC808\uC758 \uAC80\uBB34"
+  skillType: 0
+  description: "\uC124\uBA85\uC8FC\uC808\uC8FC\uC808"
+  cooldown: 3
+  mentalCost: 0
+  scriptClassName: 
+  methodName: 
+  handlerPrefab: {fileID: 5392202265632656028, guid: 62bccb9df1c9ddb40bd9aff4a5d9be43, type: 3}
+  attackRange: 2
+  attackDamage: 100
