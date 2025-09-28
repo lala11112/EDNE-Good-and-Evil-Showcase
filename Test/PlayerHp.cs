@@ -1,9 +1,9 @@
 using UnityEngine;
 
-public class EnemyHp : HealthBase
+public class PlayerHp : HealthBase
 {
-    // HP 감소
-    public void Decrease(int amount)
+    
+   public void Decrease(int amount)
     {
         Damage(amount);
     }
