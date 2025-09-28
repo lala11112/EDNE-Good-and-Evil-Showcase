@@ -13,8 +13,7 @@ public class EnemySkillController : MonoBehaviour
 
     private void Start()
     {
-        // 플레이어 Transform 가져오기
-        // 주의: Player 태그가 Hierarchy에 존재하는 오브젝트에 정확히 설정되어 있어야 합니다.
+        
         player = GameObject.FindGameObjectWithTag("Player")?.transform;
 
         // 쿨타임 배열 초기화
@@ -28,7 +27,7 @@ public class EnemySkillController : MonoBehaviour
         // 플레이어와의 거리 계산
         float distance = Vector2.Distance(transform.position, player.position);
 
-        // 감지 범위 안이면 스킬 발사 작동이 되었다 안됬다 합니다. 왠지 모르지만 가끔 오류가 생기는 고쳐봅시다.
+        // 감지 범위 안이면 스킬 발사 작동이 되었다 안됬다 합니다. 왠지 모르지만 가끔 오류가 생기는.. 고쳐봅시다.
         if (distance <= detectionRange)
         {
             for (int i = 0; i < skills.Length; i++)
