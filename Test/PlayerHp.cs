@@ -3,13 +3,13 @@ using UnityEngine;
 public class PlayerHp : HealthBase
 {
     
-   public void Decrease(int amount)
+   public void PlayerDecrease(int amount)
     {
         Damage(amount);
     }
 
     // HP 증가
-    public void Increase(int amount)
+    public void PlayerIncrease(int amount)
     {
         Heal(amount);
     }

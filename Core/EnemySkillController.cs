@@ -14,6 +14,7 @@ public class EnemySkillController : MonoBehaviour
     private void Start()
     {
         // 플레이어 Transform 가져오기
+        // 주의: Player 태그가 Hierarchy에 존재하는 오브젝트에 정확히 설정되어 있어야 합니다.
         player = GameObject.FindGameObjectWithTag("Player")?.transform;
 
         // 쿨타임 배열 초기화
@@ -27,7 +28,7 @@ public class EnemySkillController : MonoBehaviour
         // 플레이어와의 거리 계산
         float distance = Vector2.Distance(transform.position, player.position);
 
-        // 감지 범위 안이면 스킬 발사
+        // 감지 범위 안이면 스킬 발사 작동이 되었다 안됬다 합니다. 왠지 모르지만 가끔 오류가 생기는 고쳐봅시다.
         if (distance <= detectionRange)
         {
             for (int i = 0; i < skills.Length; i++)
@@ -36,30 +37,39 @@ public class EnemySkillController : MonoBehaviour
 
                 if (cooldownTimers[i] <= 0)
                 {
-                    FireSkill(i);
+                    UseSkill(i);
                     cooldownTimers[i] = skills[i].cooldownTime;
                 }
             }
         }
     }
 
-    // 스킬 발사 담당
-    private void FireSkill(int index)
+    
+    private void UseSkill(int index)
     {
         EnemySkillData skill = skills[index];
 
         if (skill.skillEffectPrefab != null && player != null)
         {
-            // 스킬 프리팹 생성
+          
             GameObject projObj = Instantiate(skill.skillEffectPrefab, transform.position, Quaternion.identity);
-
-            // Rigidbody2D 가져오기
-            Rigidbody2D rb = projObj.GetComponent<Rigidbody2D>();
-            if (rb != null)
+            
+           
+            ISkillProjectile projScript = projObj.GetComponent<ISkillProjectile>(); 
+            
+            if(projScript != null)
             {
-                // 발사 직후 플레이어 방향으로 속도 설정
-                Vector2 dir = (player.position - transform.position).normalized;
-                rb.linearVelocity = dir * skill.projectileSpeed;
+                
+                projScript.SetSkillData(skill.damage, skill.projectileSpeed);
+                
+               
+                Rigidbody2D rb = projObj.GetComponent<Rigidbody2D>();
+                if(rb != null)
+                {
+                    
+                    Vector2 dir = (player.position - transform.position).normalized;
+                    rb.linearVelocity = dir * skill.projectileSpeed; 
+                }
             }
         }
     }
