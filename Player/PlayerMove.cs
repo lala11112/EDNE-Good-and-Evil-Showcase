@@ -37,15 +37,19 @@ public class PlayerMove : MonoBehaviour
         float horizontal = Input.GetAxis("Horizontal");
         float vertical = Input.GetAxis("Vertical");
         Vector2 moveInput = new Vector2(horizontal, vertical);
+        
+        // 🚨 새로 추가된 부분: 이동 속도 계산
+        // moveInput의 크기(magnitude)를 계산하여 속도 파라미터로 사용합니다.
+        float speed = moveInput.magnitude;
 
         // 2. 물리 이동 로직
         Vector2 targetVelocity = moveInput * moveSpeed;
 
-        if (moveInput.magnitude > 0.1f)
+        if (speed > 0.1f) // 입력이 있을 때
         {
             rb.linearVelocity = Vector2.MoveTowards(rb.linearVelocity, targetVelocity, acceleration * Time.fixedDeltaTime);
         }
-        else
+        else // 입력이 없을 때
         {
             rb.linearVelocity = Vector2.MoveTowards(rb.linearVelocity, Vector2.zero, deceleration * Time.fixedDeltaTime);
         }
@@ -56,42 +60,12 @@ public class PlayerMove : MonoBehaviour
             rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
         }
 
-        // 3. 애니메이션 업데이트 (4방향 Bool 값 설정)
-        UpdateAnimationWithFourBools(horizontal, vertical);
-    }
-
-    private void UpdateAnimationWithFourBools(float horizontalInput, float verticalInput)
-    {
-        // 모든 Bool 값을 일단 끕니다. (중복 모션 방지)
-        anim.SetBool("IsMovingUp", false);
-        anim.SetBool("IsMovingDown", false);
-        anim.SetBool("IsMovingLeft", false); // ⭐ 새로 추가된 Bool
-        anim.SetBool("IsMovingRight", false); // ⭐ 새로 추가된 Bool
-
-        // 3.1. 위아래 입력 처리 (수직 방향 우선)
-        if (verticalInput > 0.01f) // 위쪽 (BackMove)
-        {
-            anim.SetBool("IsMovingUp", true);
-        }
-        else if (verticalInput < -0.01f) // 아래쪽 (FrontMove)
-        {
-            anim.SetBool("IsMovingDown", true);
-        }
-
-        // 3.2. 좌우 입력 처리 (수평 방향)
-        // 위아래 움직임이 강할 경우(큰 값일 경우) 좌우 Bool은 설정하지 않아,
-        // 애니메이터가 상하 모션을 우선하도록 할 수 있습니다. 
-        // 여기서는 단순함을 위해 입력이 들어오면 Bool을 설정합니다.
+        // 3. ✨ 애니메이션 업데이트 (블렌드 트리 방식)
+        // A. 방향 정보 전달 (블렌드 트리의 혼합 비율 제어)
+        anim.SetFloat("XInput", horizontal);
+        anim.SetFloat("YInput", vertical);
         
-        if (horizontalInput > 0.01f) // 오른쪽 입력
-        {
-            anim.SetBool("IsMovingRight", true);
-        }
-        else if (horizontalInput < -0.01f) // 왼쪽 입력
-        {
-            anim.SetBool("IsMovingLeft", true);
-        }
-
-        
+        // B. 속도 정보 전달 (Idle <-> Locomotion 상태 전환 제어)
+        anim.SetFloat("Speed", speed); 
     }
 }
