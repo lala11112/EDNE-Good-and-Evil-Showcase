@@ -57,13 +57,73 @@ public class SlashSkillHandler : MonoBehaviour, SkillHandlerInterface
 			// var sr = aoeGO.AddComponent<SpriteRenderer>(); ...
 		}
 
-		// 3) 오너를 따라가게 할지 여부
+		// 3) 데미지 처리 스크립트 추가
+		if (aoeGO != null)
+		{
+			var damageHandler = aoeGO.AddComponent<SkillDamageHandler>();
+			damageHandler.Setup(data, owner, rank);
+		}
+
+		// 4) 오너를 따라가게 할지 여부
 		if (attachToOwner && aoeGO != null)
 		{
 			aoeGO.transform.SetParent(ownerTf, true);
 		}
 
-		// 4) 일정 시간 후 제거
+		// 5) 일정 시간 후 제거
 		Destroy(aoeGO, aoeDuration);
+	}
+}
+
+// 스킬 데미지 처리 컴포넌트
+public class SkillDamageHandler : MonoBehaviour
+{
+	private BaseSkillData skillData;
+	private GameObject skillOwner;
+	private SkillRank skillRank;
+
+	public void Setup(BaseSkillData data, GameObject owner, SkillRank rank)
+	{
+		skillData = data;
+		skillOwner = owner;
+		skillRank = rank;
+	}
+
+	private void OnTriggerEnter2D(Collider2D other)
+	{
+		// 자신이거나 스킬 소유자와 충돌한 경우 무시
+		if (other.gameObject == skillOwner || other.gameObject == gameObject)
+			return;
+
+		// 데미지를 받을 수 있는 객체인지 확인
+		var damageable = other.GetComponent<IDamageable>();
+		if (damageable == null || !damageable.IsAlive)
+			return;
+
+		// 데미지 계산
+		int damage = GetDamage();
+		
+		// 객체에게 데미지 적용
+		damageable.TakeDamage(damage);
+		
+		Debug.Log($"[{skillData.skillName}] {other.name}에게 {damage} 데미지!");
+	}
+
+	private int GetDamage()
+	{
+		// Test01ZSkillData 타입인지 확인
+		if (skillData is Test01ZSkillData testSkill)
+		{
+			return testSkill.attackDamage;
+		}
+		
+		// Test02ZSkillData 타입인지 확인
+		if (skillData is Test02ZSkillData testSkill2)
+		{
+			return testSkill2.attackDamage;
+		}
+		
+		// 기본값 반환
+		return 50;
 	}
 }
