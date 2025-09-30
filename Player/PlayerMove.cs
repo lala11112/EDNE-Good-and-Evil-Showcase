@@ -38,7 +38,7 @@ public class PlayerMove : MonoBehaviour
         float vertical = Input.GetAxis("Vertical");
         Vector2 moveInput = new Vector2(horizontal, vertical);
         
-        // 🚨 새로 추가된 부분: 이동 속도 계산
+       
         // moveInput의 크기(magnitude)를 계산하여 속도 파라미터로 사용합니다.
         float speed = moveInput.magnitude;
 
@@ -60,12 +60,11 @@ public class PlayerMove : MonoBehaviour
             rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
         }
 
-        // 3. ✨ 애니메이션 업데이트 (블렌드 트리 방식)
-        // A. 방향 정보 전달 (블렌드 트리의 혼합 비율 제어)
+        
         anim.SetFloat("XInput", horizontal);
         anim.SetFloat("YInput", vertical);
         
-        // B. 속도 정보 전달 (Idle <-> Locomotion 상태 전환 제어)
+    
         anim.SetFloat("Speed", speed); 
     }
 }
