@@ -16,10 +16,10 @@ public class SkillController : MonoBehaviour
     [SerializeField] private SkillLoadout loadout;
 
     [Header("기본 스킬 (로드아웃 없을 때 사용)")]
-    [SerializeField] private BaseSkillData defaultZSkill;  // 기본 Z 스킬
-    [SerializeField] private BaseSkillData defaultXSkill;  // 기본 X 스킬
-    [SerializeField] private BaseSkillData defaultCSkill;  // 기본 C 스킬
-    [SerializeField] private BaseSkillData defaultVSkill;  // 기본 V 스킬
+    [SerializeField] private PlayerSkillData defaultZSkill;  // 기본 Z 스킬
+    [SerializeField] private PlayerSkillData defaultXSkill;  // 기본 X 스킬
+    [SerializeField] private PlayerSkillData defaultCSkill;  // 기본 C 스킬
+    [SerializeField] private PlayerSkillData defaultVSkill;  // 기본 V 스킬
     
     private InputAction skillZAction;
     private InputAction skillXAction;
@@ -114,10 +114,10 @@ public class SkillController : MonoBehaviour
     }
 
     // 런타임 스킬 변경 API
-    public void ChangeZSkill(BaseSkillData newSkill) => zSlot?.SetSkillData(newSkill);
-    public void ChangeXSkill(BaseSkillData newSkill) => xSlot?.SetSkillData(newSkill);
-    public void ChangeCSkill(BaseSkillData newSkill) => cSlot?.SetSkillData(newSkill);
-    public void ChangeVSkill(BaseSkillData newSkill) => vSlot?.SetSkillData(newSkill);
+    public void ChangeZSkill(PlayerSkillData newSkill) => zSlot?.SetSkillData(newSkill);
+    public void ChangeXSkill(PlayerSkillData newSkill) => xSlot?.SetSkillData(newSkill);
+    public void ChangeCSkill(PlayerSkillData newSkill) => cSlot?.SetSkillData(newSkill);
+    public void ChangeVSkill(PlayerSkillData newSkill) => vSlot?.SetSkillData(newSkill);
 }
 
 // 스킬 슬롯 타입 열거형 (새로 추가)
@@ -126,19 +126,7 @@ public enum SkillSlotType
     Z, X, C, V
 }
 
-public enum SkillType
-{
-    Courage,    // 용기 (Z)
-    Justice,    // 정의 (X)
-    Temperance, // 절제 (C)
-    Wisdom      // 지혜 (V)
-}
 
 public enum SkillRank { D, C, B, A, S }
 
-
-public interface SkillHandlerInterface
-{
-	void Setup(BaseSkillData data, GameObject owner);
-	void Use(SkillRank rank);
-}
+// ⭐ SkillHandlerInterface는 Core/SkillHandlerInterface.cs로 이동됨

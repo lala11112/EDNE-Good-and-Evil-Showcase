@@ -63,7 +63,65 @@ public class SlashSkillHandler : MonoBehaviour, SkillHandlerInterface
 			aoeGO.transform.SetParent(ownerTf, true);
 		}
 
-		// 4) 일정 시간 후 제거
+		// ⭐ 4) AOE 데미지 처리 컴포넌트 추가
+		if (aoeGO != null)
+		{
+			// 플레이어 컨트롤러 가져오기 (owner 또는 부모에서 찾기)
+			PlayerController playerController = null;
+			if (owner != null)
+			{
+				// owner에서 직접 찾기
+				playerController = owner.GetComponent<PlayerController>();
+				
+				// 없으면 부모에서 찾기
+				if (playerController == null)
+				{
+					playerController = owner.GetComponentInParent<PlayerController>();
+				}
+			}
+			
+			// PlayerSkillData 캐스팅
+			PlayerSkillData playerSkillData = data as PlayerSkillData;
+			
+			if (playerController != null && playerSkillData != null)
+			{
+				// 플레이어 공격력 기반 데미지 계산
+				float calculatedDamage = playerController.CalculateSkillDamage(playerSkillData.damagePercent);
+				
+				// AOEDamage 컴포넌트 추가 및 설정
+				AOEDamage aoeDamage = aoeGO.AddComponent<AOEDamage>();
+				aoeDamage.Setup(calculatedDamage, EntityType.Player);
+				
+				Debug.Log($"[SlashSkillHandler] AOE 데미지 설정 완료 - {calculatedDamage} (공격력: {playerController.GetAttackPower()}, 퍼센트: {playerSkillData.damagePercent}%)");
+			}
+			else
+			{
+				Debug.LogError($"[SlashSkillHandler] PlayerController 또는 PlayerSkillData를 찾을 수 없습니다! " +
+					$"(PlayerController: {playerController != null}, PlayerSkillData: {playerSkillData != null}, owner: {owner?.name})");
+			}
+		}
+
+		// 5) 일정 시간 후 제거
 		Destroy(aoeGO, aoeDuration);
+		
+		// 영구 핸들러: Use() 후에도 핸들러는 유지됨 (Cleanup 호출 안 함)
+	}
+	
+	/// <summary>
+	/// 스킬 정리 (스킬 변경 시 호출)
+	/// </summary>
+	public void Cleanup()
+	{
+		// 영구 핸들러 방식: 상태만 초기화, 파괴하지 않음
+		// (파괴는 SkillSlot에서 처리)
+		
+		// 진행 중인 코루틴 정리
+		StopAllCoroutines();
+		
+		// 상태 초기화
+		data = null;
+		owner = null;
+		
+		Debug.Log("[SlashSkillHandler] Cleanup 완료 (상태 초기화)");
 	}
 }
