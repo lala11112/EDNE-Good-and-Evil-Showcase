@@ -247,6 +247,9 @@ public partial class MonsterController : EntityController
             navAgent.enabled = false;
         }
         
+        // ⭐ 죽음 이벤트 발생 (EnemyDeathEventSystem이 있다면 자동으로 감지됨)
+        Debug.Log($"[MonsterController] {gameObject.name}의 죽음이 EnemyDeathEventSystem에 의해 감지됩니다.");
+        
         // 보상 처리 (나중에 구현)
         if (monsterData != null)
         {

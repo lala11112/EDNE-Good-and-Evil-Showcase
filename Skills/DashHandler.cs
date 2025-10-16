@@ -119,6 +119,14 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
         
         // 2. 몬스터의 일반 이동 로직 완전 비활성화
         ownerController.DisableMovement();
+		
+		// 에이전트 사용 가능 여부 선 확인
+		if (agent == null || !agent.enabled || !agent.isActiveAndEnabled || !agent.isOnNavMesh)
+		{
+			Debug.LogWarning("[DashHandler] NavMeshAgent가 비활성화되었거나 NavMesh 위에 있지 않아 대시를 시작할 수 없습니다.");
+			Cleanup();
+			yield break;
+		}
         
         // 3. NavMeshAgent를 대시 모드로 설정
         agent.speed = dashSpeed;
@@ -134,12 +142,24 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
         
         // 4. 대시 지속 시간만큼 플레이어를 향해 돌진 + 거리 판정
         float elapsedTime = 0f;
-        while (elapsedTime < dashDuration && !hasHitTarget)
+		while (elapsedTime < dashDuration && !hasHitTarget)
         {
+			// 주기적 안전 점검: 소유자가 죽었거나 에이전트가 더 이상 유효하지 않으면 중단
+			if (ownerController == null || !ownerController.IsAlive)
+			{
+				Debug.Log("[DashHandler] 소유자가 사망하여 대시를 중단합니다.");
+				break;
+			}
+			if (agent == null || !agent.enabled || !agent.isActiveAndEnabled || !agent.isOnNavMesh)
+			{
+				Debug.LogWarning("[DashHandler] NavMeshAgent가 더 이상 유효하지 않아 대시를 중단합니다.");
+				break;
+			}
+			
             if (target != null)
             {
                 // 매 프레임 플레이어 위치로 목적지 갱신 (유도탄처럼)
-                agent.SetDestination(target.position);
+				agent.SetDestination(target.position);
 
                 // 대시 시간 창 내부에서만 판정
                 if (Time.time <= dashEndTime)
@@ -166,19 +186,33 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
             yield return null;
         }
         
-        // 5. 대시 완료 후 즉시 정지
-        agent.isStopped = true;
-        
-        // 6. 충돌 결과 로그
+		// 5. 대시 완료 후 즉시 정지 (에이전트가 유효한 경우에만)
+		if (agent != null && agent.enabled && agent.isActiveAndEnabled && agent.isOnNavMesh)
+		{
+			agent.isStopped = true;
+		}
+		else
+		{
+			Debug.LogWarning("[DashHandler] NavMeshAgent가 유효하지 않아 정지 호출을 생략합니다.");
+		}
+		
+		// 6. 충돌 결과 로그
         if (!hasHitTarget)
         {
             Debug.Log($"[DashHandler] 대시 완료 - 플레이어와 충돌하지 않음");
         }
         
-        // 7. 원래 속성 복구 및 일반 이동 로직 재활성화
-        agent.speed = originalSpeed;
-        agent.stoppingDistance = originalStoppingDistance;
-        agent.autoBraking = originalAutoBraking;
+		// 7. 원래 속성 복구 및 일반 이동 로직 재활성화 (에이전트 유효 시)
+		if (agent != null && agent.enabled && agent.isActiveAndEnabled)
+		{
+			agent.speed = originalSpeed;
+			agent.stoppingDistance = originalStoppingDistance;
+			agent.autoBraking = originalAutoBraking;
+		}
+		else
+		{
+			Debug.LogWarning("[DashHandler] NavMeshAgent가 유효하지 않아 속성 복구를 생략합니다.");
+		}
         isDashing = false;
         ownerController.EnableMovement();
         
