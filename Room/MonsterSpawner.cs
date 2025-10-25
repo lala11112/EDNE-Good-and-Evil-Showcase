@@ -1,0 +1,363 @@
+using UnityEngine;
+using System.Collections.Generic;
+
+/// <summary>
+/// 몬스터 스포너
+/// 방에서 몬스터를 스폰하는 지점을 관리합니다.
+/// </summary>
+public class MonsterSpawner : MonoBehaviour
+{
+    [Header("스포너 기본 설정")]
+    [Tooltip("스포너 이름")]
+    public string spawnerName = "Spawner";
+    
+    [Tooltip("스포너 인덱스 (RoomController에서 참조)")]
+    public int spawnerIndex = 0;
+    
+    [Tooltip("스포너 활성화 여부")]
+    public bool isActive = true;
+
+    [Header("스폰 설정")]
+    [Tooltip("스폰 반경")]
+    [Range(0.5f, 5f)]
+    public float spawnRadius = 1f;
+    
+    [Tooltip("스폰 높이 오프셋")]
+    [Range(0f, 2f)]
+    public float spawnHeightOffset = 0f;
+    
+    [Tooltip("스폰 시 랜덤 회전 적용")]
+    public bool randomRotation = true;
+
+    [Header("시각적 표시")]
+    [Tooltip("스포너 표시 이펙트")]
+    public GameObject spawnerIndicator;
+    
+    [Tooltip("스폰 대기 중 표시 이펙트")]
+    public GameObject warningEffect;
+    
+    [Tooltip("스포너 표시 색상")]
+    public Color spawnerColor = Color.red;
+
+    [Header("디버그")]
+    [Tooltip("스포너 표시")]
+    public bool showGizmos = true;
+    
+    [Tooltip("스포너 인덱스 표시")]
+    public bool showSpawnerIndex = true;
+
+    [Header("연결된 RoomController")]
+    [Tooltip("이 스포너가 속한 RoomController")]
+    [SerializeField] private RoomController connectedRoomController;
+
+    // 현재 스폰 대기 중인 몬스터 데이터
+    private MonsterSpawnData currentSpawnData;
+    private float spawnTimer;
+    private bool isSpawning = false;
+
+    /// <summary>
+    /// 스포너 초기화
+    /// </summary>
+    private void Awake()
+    {
+        // 스포너 표시 이펙트 활성화
+        if (spawnerIndicator != null)
+        {
+            spawnerIndicator.SetActive(true);
+        }
+        
+        // RoomController 자동 찾기 (Awake에서 시도)
+        if (connectedRoomController == null)
+        {
+            connectedRoomController = GetComponentInParent<RoomController>();
+            if (connectedRoomController != null)
+            {
+                Debug.Log($"[MonsterSpawner] {spawnerName}에서 RoomController 자동 찾기 성공: {connectedRoomController.name}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 스포너 업데이트
+    /// </summary>
+    private void Update()
+    {
+        if (isSpawning && currentSpawnData != null)
+        {
+            spawnTimer -= Time.deltaTime;
+            
+            if (spawnTimer <= 0f)
+            {
+                SpawnMonster();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 몬스터 스폰 시작
+    /// </summary>
+    /// <param name="spawnData">스폰할 몬스터 데이터</param>
+    /// <param name="warningTime">위협 표시 시간</param>
+    public void StartSpawning(MonsterSpawnData spawnData, float warningTime)
+    {
+        if (!isActive)
+        {
+            Debug.LogWarning($"[MonsterSpawner] 스포너 {spawnerName}이 비활성화되어 있습니다.");
+            return;
+        }
+
+        // RoomController가 연결되어 있는지 확인
+        if (connectedRoomController == null)
+        {
+            Debug.LogWarning($"[MonsterSpawner] {spawnerName}에 RoomController가 연결되지 않았습니다. 자동으로 찾는 중...");
+            connectedRoomController = GetComponentInParent<RoomController>();
+            if (connectedRoomController == null)
+            {
+                Debug.LogError($"[MonsterSpawner] {spawnerName}에서 RoomController를 찾을 수 없습니다! 스폰을 중단합니다.");
+                return;
+            }
+            else
+            {
+                Debug.Log($"[MonsterSpawner] {spawnerName}에서 RoomController 자동 찾기 성공: {connectedRoomController.name}");
+            }
+        }
+
+        currentSpawnData = spawnData;
+        spawnTimer = warningTime;
+        isSpawning = true;
+
+        // 위협 표시 이펙트 활성화
+        if (warningEffect != null)
+        {
+            warningEffect.SetActive(true);
+        }
+
+        Debug.Log($"[MonsterSpawner] {spawnerName}에서 {spawnData.monsterPrefab.name} 스폰 시작 (대기시간: {warningTime}초)");
+    }
+
+    /// <summary>
+    /// 몬스터 스폰 실행
+    /// </summary>
+    private void SpawnMonster()
+    {
+        if (currentSpawnData == null || currentSpawnData.monsterPrefab == null)
+        {
+            Debug.LogError($"[MonsterSpawner] {spawnerName}에서 스폰할 몬스터 데이터가 없습니다.");
+            isSpawning = false;
+            return;
+        }
+
+        // 스폰 위치 계산
+        Vector3 spawnPosition = GetSpawnPosition();
+        
+        // 몬스터 인스턴스 생성
+        GameObject monsterInstance = Instantiate(currentSpawnData.monsterPrefab, spawnPosition, GetSpawnRotation());
+        
+        // 몬스터를 RoomController에 등록
+        var monsterController = monsterInstance.GetComponent<MonsterController>();
+        if (monsterController != null)
+        {
+            Debug.Log($"[MonsterSpawner] {spawnerName}에서 몬스터 {monsterController.name} 스폰됨");
+            
+            // 연결된 RoomController 사용 (StartSpawning에서 이미 확인됨)
+            if (connectedRoomController != null)
+            {
+                Debug.Log($"[MonsterSpawner] 연결된 RoomController 사용: {connectedRoomController.name}");
+                
+                // 몬스터 등록
+                connectedRoomController.RegisterMonster(monsterController);
+                
+                // 몬스터 죽음 이벤트 구독
+                monsterController.OnMonsterDied += connectedRoomController.UnregisterMonster;
+                Debug.Log($"[MonsterSpawner] {monsterController.name}의 죽음 이벤트 구독 완료");
+            }
+            else
+            {
+                Debug.LogError($"[MonsterSpawner] {spawnerName}에 연결된 RoomController가 없습니다! 이는 StartSpawning에서 확인되어야 합니다.");
+            }
+        }
+        else
+        {
+            Debug.LogError($"[MonsterSpawner] {spawnerName}에서 MonsterController를 찾을 수 없습니다!");
+        }
+
+        // 스폰 이펙트 재생
+        PlaySpawnEffect(spawnPosition);
+
+        // 스폰 완료
+        string spawnedMonsterName = currentSpawnData.monsterPrefab.name;
+        isSpawning = false;
+        currentSpawnData = null;
+
+        // 위협 표시 이펙트 비활성화
+        if (warningEffect != null)
+        {
+            warningEffect.SetActive(false);
+        }
+
+        Debug.Log($"[MonsterSpawner] {spawnerName}에서 {spawnedMonsterName} 스폰 완료");
+    }
+
+    /// <summary>
+    /// 스폰 위치 계산
+    /// </summary>
+    private Vector3 GetSpawnPosition()
+    {
+        Vector3 basePosition = transform.position + Vector3.up * spawnHeightOffset;
+        
+        // 스폰 반경 내 랜덤 위치
+        Vector2 randomOffset = Random.insideUnitCircle * spawnRadius;
+        Vector3 spawnPosition = basePosition + new Vector3(randomOffset.x, 0f, randomOffset.y);
+        
+        return spawnPosition;
+    }
+
+    /// <summary>
+    /// 스폰 회전값 계산
+    /// </summary>
+    private Quaternion GetSpawnRotation()
+    {
+        if (randomRotation)
+        {
+            return Quaternion.Euler(0f, 0f, 0f);
+        }
+        else
+        {
+            return transform.rotation;
+        }
+    }
+
+    /// <summary>
+    /// 스폰 이펙트 재생
+    /// </summary>
+    private void PlaySpawnEffect(Vector3 position)
+    {
+        // 스폰 이펙트가 설정되어 있으면 재생
+        // TODO: 이펙트 시스템 구현
+        Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 이펙트 재생");
+    }
+
+    /// <summary>
+    /// 스포너 비활성화
+    /// </summary>
+    public void DeactivateSpawner()
+    {
+        isActive = false;
+        isSpawning = false;
+        currentSpawnData = null;
+        
+        if (warningEffect != null)
+        {
+            warningEffect.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// 스포너 활성화
+    /// </summary>
+    public void ActivateSpawner()
+    {
+        isActive = true;
+    }
+
+    /// <summary>
+    /// 현재 스폰 중인지 확인
+    /// </summary>
+    public bool IsSpawning()
+    {
+        return isSpawning;
+    }
+
+    /// <summary>
+    /// RoomController 설정
+    /// </summary>
+    public void SetRoomController(RoomController roomController)
+    {
+        connectedRoomController = roomController;
+        Debug.Log($"[MonsterSpawner] {spawnerName}에 RoomController 설정: {roomController?.name ?? "null"}");
+    }
+
+    /// <summary>
+    /// 스포너 정보 가져오기
+    /// </summary>
+    public SpawnerInfo GetSpawnerInfo()
+    {
+        return new SpawnerInfo
+        {
+            spawnerName = this.spawnerName,
+            spawnerIndex = this.spawnerIndex,
+            spawnPosition = transform.position,
+            isActive = this.isActive
+        };
+    }
+
+    /// <summary>
+    /// 기즈모 그리기
+    /// </summary>
+    private void OnDrawGizmos()
+    {
+        if (!showGizmos) return;
+
+        // 스포너 위치 표시
+        Gizmos.color = spawnerColor;
+        Gizmos.DrawWireSphere(transform.position + Vector3.up * spawnHeightOffset, spawnRadius);
+        
+        // 스포너 방향 표시
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawRay(transform.position, transform.forward * 2f);
+        
+        // 스포너 인덱스 표시
+        if (showSpawnerIndex)
+        {
+            DrawSpawnerIndex();
+        }
+    }
+
+    /// <summary>
+    /// 기즈모 선택 시 그리기
+    /// </summary>
+    private void OnDrawGizmosSelected()
+    {
+        if (!showGizmos) return;
+
+        // 선택된 스포너 강조 표시
+        Gizmos.color = Color.white;
+        Gizmos.DrawWireSphere(transform.position + Vector3.up * spawnHeightOffset, spawnRadius + 0.5f);
+    }
+
+    /// <summary>
+    /// 스포너 인덱스 그리기
+    /// </summary>
+    private void DrawSpawnerIndex()
+    {
+        // 스포너 인덱스 텍스트 표시
+        Vector3 labelPosition = transform.position -Vector3.right * 2.5f + Vector3.up * 1.0f;   
+        
+        // 인덱스 번호 표시
+        string indexText = $"Spawner {spawnerIndex}";
+        
+        // Unity의 Handles를 사용하여 텍스트 표시 (크고 검정색)
+        #if UNITY_EDITOR
+        // 새로운 스타일 생성
+        var labelStyle = new GUIStyle();
+        labelStyle.fontSize = 32;  // 글씨 크기 증가
+        labelStyle.normal.textColor = Color.red;  // 검정색
+        labelStyle.fontStyle = FontStyle.Bold;  // 굵은 글씨
+        
+        // 스타일 적용하여 텍스트 표시
+        UnityEditor.Handles.Label(labelPosition, indexText, labelStyle);
+        #endif
+    }
+}
+
+/// <summary>
+/// 스포너 정보 구조체
+/// </summary>
+[System.Serializable]
+public struct SpawnerInfo
+{
+    public string spawnerName;
+    public int spawnerIndex;
+    public Vector3 spawnPosition;
+    public bool isActive;
+}

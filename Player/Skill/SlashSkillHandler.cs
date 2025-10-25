@@ -12,8 +12,8 @@ public class SlashSkillHandler : MonoBehaviour, SkillHandlerInterface
 	// - spawnLocalOffset: 오너 기준 생성 위치 보정(x: 오른쪽, y: 위)
 	// - attachToOwner: true면 지속 시간 동안 오너를 따라다님
 	[SerializeField] private GameObject aoePrefab;
-	[SerializeField] private float aoeRadius = 1.5f;
-	[SerializeField] private float aoeDuration = 0.5f;
+	[SerializeField] private float aoeRadius = 0.8f;  // 반경을 1.5에서 0.8로 줄임
+	[SerializeField] private float aoeDuration = 0.2f;  // 지속시간을 0.5에서 0.2로 줄임
 	[SerializeField] private Vector2 spawnLocalOffset = Vector2.zero;
 	[SerializeField] private bool attachToOwner = false;
 

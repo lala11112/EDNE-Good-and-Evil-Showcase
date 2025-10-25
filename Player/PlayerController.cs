@@ -1,4 +1,3 @@
-
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -25,6 +24,9 @@ public class PlayerController : EntityController
 	[Header("스킬 시스템")]
 	[Tooltip("스킬 관리 컨트롤러")]
 	[SerializeField] private SkillController skillController;
+
+	[Header("애니메이션")]
+	[SerializeField] private Animator animator;
 
 	[Header("입력 시스템")]
 	[Tooltip("Input Action Asset (Generate C# Class를 사용하지 않는 경우)")]
@@ -147,10 +149,19 @@ public class PlayerController : EntityController
 			skillController = GetComponent<SkillController>();
 		}
 
+		// Rigidbody2D 설정 (Dynamic + 즉시 반응)
+		SetupRigidbody2D();
+
 		// Input Actions 초기화
 		if (inputActions != null)
 		{
 			moveAction = inputActions.FindAction("Move");
+		}
+
+		// Animator 자동 할당
+		if (animator == null)
+		{
+			animator = GetComponentInChildren<Animator>();
 		}
 	}
 
@@ -189,12 +200,40 @@ public class PlayerController : EntityController
 
 		// 이동 입력 처리
 		UpdateMovementInput();
+
+		// 애니메이터 파라미터 업데이트
+		UpdateAnimatorParameters();
 	}
 
 	private void FixedUpdate()
 	{
 		// 물리 기반 이동 처리
 		ProcessMovement();
+	}
+
+	#endregion
+
+	#region Rigidbody2D 설정
+
+	/// <summary>
+	/// Rigidbody2D 설정 (Dynamic + 즉시 반응)
+	/// </summary>
+	private void SetupRigidbody2D()
+	{
+		if (rb == null)
+		{
+			rb = GetComponent<Rigidbody2D>();
+		}
+
+		// Dynamic 설정으로 물리 충돌 활성화
+		rb.bodyType = RigidbodyType2D.Dynamic;
+		
+		// 2D 탑뷰 게임 최적화 설정
+		rb.gravityScale = 0f;                    // 중력 제거
+		rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous; // 정확한 충돌 감지
+		rb.freezeRotation = true;               // 회전 고정
+		
+		Debug.Log("[PlayerController] Rigidbody2D가 Dynamic 모드로 설정되었습니다. (즉시 반응 + 물리 충돌)");
 	}
 
 	#endregion
@@ -455,22 +494,35 @@ public class PlayerController : EntityController
 	}
 
 	/// <summary>
-	/// 이동 처리 (FixedUpdate에서 호출)
+	private void UpdateAnimatorParameters()
+	{
+		if (animator == null) return;
+
+		bool isMoving = moveInput.sqrMagnitude > 0.01f;
+		Vector2 dir = isMoving ? moveInput.normalized : GetDirectionVector(lastMoveDirection);
+
+		animator.SetBool("isMove", isMoving);
+		animator.SetFloat("InputX", dir.x);
+		animator.SetFloat("InputY", dir.y);
+	}
+
 	/// </summary>
 	private void ProcessMovement()
 	{
 		// 이동 불가 상태 체크
 		if (!CanMove())
 		{
-			// ⭐ Kinematic은 velocity 설정 안함 (이미 정지 상태)
+			// 즉시 정지 (가속도 없음)
+			rb.linearVelocity = Vector2.zero;
 			currentMoveDirection = MoveDirection.None;
 			return;
 		}
 
-		// 이동 입력이 없으면 정지
+		// 이동 입력이 없으면 즉시 정지
 		if (moveInput.sqrMagnitude < 0.01f)
 		{
-			// ⭐ Kinematic은 velocity 설정 안함 (이미 정지 상태)
+			// 즉시 정지 (가속도 없음)
+			rb.linearVelocity = Vector2.zero;
 			currentMoveDirection = MoveDirection.None;
 			return;
 		}
@@ -489,9 +541,9 @@ public class PlayerController : EntityController
 		float speedMultiplier = GetMoveSpeedMultiplier(); // EntityController에서 제공
 		float finalSpeed = moveSpeed * speedMultiplier;
 
-		// ⭐ Kinematic Rigidbody2D는 MovePosition 사용 (velocity 사용 불가)
-		Vector2 movement = moveInput.normalized * finalSpeed * Time.fixedDeltaTime;
-		rb.MovePosition(rb.position + movement);
+		// ⭐ Dynamic Rigidbody2D는 velocity 사용 (물리 충돌 자동 처리)
+		// 즉시 속도 설정 (가속도 영향 없음 - 높은 드래그로 제어)
+		rb.linearVelocity = moveInput.normalized * finalSpeed;
 	}
 
 	/// <summary>
