@@ -241,6 +241,8 @@ public class EntityController : MonoBehaviour
 		// 사망 확인
 		if (currentHealth <= 0)
 		{
+			Debug.Log($"[EntityController] {name} 체력이 0 이하로 Die() 호출");
+			
 			Die();
 		}
 

@@ -238,6 +238,7 @@ public partial class MonsterController : EntityController
     /// </summary>
     protected override void Die()
     {
+        Debug.Log("다이");
         base.Die();
         
         // NavMesh 이동 정지
@@ -262,6 +263,10 @@ public partial class MonsterController : EntityController
         
         Debug.Log($"[MonsterController] {gameObject.name} 사망");
         
+        // 죽음 이벤트 발생
+        Debug.Log($"[MonsterController] {gameObject.name} 죽음 이벤트 발생 - 구독자 수: {(OnMonsterDied?.GetInvocationList()?.Length ?? 0)}");
+        OnMonsterDied?.Invoke(this);
+        
         // TODO: 죽음 애니메이션, 이펙트 등
         // PlayDeathAnimation();
         // PlayDeathSound();
@@ -276,6 +281,9 @@ public partial class MonsterController : EntityController
         float destroyDelay = monsterData != null ? monsterData.deathDestroyDelay : 2f;
         Destroy(gameObject, destroyDelay);
     }
+
+    // 이벤트
+    public System.Action<MonsterController> OnMonsterDied;
     
     #endregion
 }
