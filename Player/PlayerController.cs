@@ -494,11 +494,6 @@ public class PlayerController : EntityController
 	}
 
 	/// <summary>
-<<<<<<< HEAD
-	/// 이동 처리 (FixedUpdate에서 호출) - Dynamic Rigidbody2D + Velocity 방식
-=======
-	/// 애니메이터 파라미터 업데이트 (PlayerMV Blend Tree용)
-	/// </summary>
 	private void UpdateAnimatorParameters()
 	{
 		if (animator == null) return;
@@ -511,9 +506,6 @@ public class PlayerController : EntityController
 		animator.SetFloat("InputY", dir.y);
 	}
 
-	/// <summary>
-	/// 이동 처리 (FixedUpdate에서 호출)
->>>>>>> 2070255e60b151bcff2bdf510b0faa6e1ca2dc8a
 	/// </summary>
 	private void ProcessMovement()
 	{
