@@ -1,4 +1,3 @@
-
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -25,6 +24,9 @@ public class PlayerController : EntityController
 	[Header("스킬 시스템")]
 	[Tooltip("스킬 관리 컨트롤러")]
 	[SerializeField] private SkillController skillController;
+
+	[Header("애니메이션")]
+	[SerializeField] private Animator animator;
 
 	[Header("입력 시스템")]
 	[Tooltip("Input Action Asset (Generate C# Class를 사용하지 않는 경우)")]
@@ -152,6 +154,12 @@ public class PlayerController : EntityController
 		{
 			moveAction = inputActions.FindAction("Move");
 		}
+
+		// Animator 자동 할당
+		if (animator == null)
+		{
+			animator = GetComponentInChildren<Animator>();
+		}
 	}
 
 	protected override void OnEnable()
@@ -189,6 +197,9 @@ public class PlayerController : EntityController
 
 		// 이동 입력 처리
 		UpdateMovementInput();
+
+		// 애니메이터 파라미터 업데이트
+		UpdateAnimatorParameters();
 	}
 
 	private void FixedUpdate()
@@ -452,6 +463,21 @@ public class PlayerController : EntityController
 		{
 			moveInput = moveAction.ReadValue<Vector2>();
 		}
+	}
+
+	/// <summary>
+	/// 애니메이터 파라미터 업데이트 (PlayerMV Blend Tree용)
+	/// </summary>
+	private void UpdateAnimatorParameters()
+	{
+		if (animator == null) return;
+
+		bool isMoving = moveInput.sqrMagnitude > 0.01f;
+		Vector2 dir = isMoving ? moveInput.normalized : GetDirectionVector(lastMoveDirection);
+
+		animator.SetBool("isMove", isMoving);
+		animator.SetFloat("InputX", dir.x);
+		animator.SetFloat("InputY", dir.y);
 	}
 
 	/// <summary>
