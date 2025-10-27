@@ -1,100 +1,81 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Audio;
 
 namespace EDNE.UI
 {
     /// <summary>
-    /// 전체 UI를 관리하는 싱글톤 매니저
-    /// - 씬 전환 (Enum 기반)
-    /// - UI 상태 관리
-    /// - 옵션 설정
+    /// UI 전역 관리자 (싱글톤)
+    /// - 씬 로딩
+    /// - 볼륨 설정
+    /// - 게임 종료
     /// </summary>
     public class UIManager : MonoBehaviour
     {
-        private static UIManager _instance;
+        private static UIManager instance;
+
         public static UIManager Instance
         {
             get
             {
-                if (_instance == null)
+                if (instance == null)
                 {
-                    _instance = FindObjectOfType<UIManager>();
-                    if (_instance == null)
+                    // 씬에서 UIManager 찾기
+                    instance = FindObjectOfType<UIManager>();
+
+                    // 없으면 새로 생성
+                    if (instance == null)
                     {
                         GameObject go = new GameObject("UIManager");
-                        _instance = go.AddComponent<UIManager>();
+                        instance = go.AddComponent<UIManager>();
                         DontDestroyOnLoad(go);
+                        Debug.Log("[UIManager] 새로운 인스턴스 생성됨");
                     }
                 }
-                return _instance;
+                return instance;
             }
         }
 
         private void Awake()
         {
-            if (_instance != null && _instance != this)
+            // 싱글톤 중복 방지
+            if (instance != null && instance != this)
             {
+                Debug.LogWarning("[UIManager] 중복된 인스턴스가 감지되어 제거됩니다.");
                 Destroy(gameObject);
                 return;
             }
 
-            _instance = this;
+            instance = this;
             DontDestroyOnLoad(gameObject);
+            Debug.Log("[UIManager] 초기화 완료");
         }
 
-        #region Scene Management (Enum 기반)
-        
+        #region Scene Management
+
         /// <summary>
-        /// 씬 로드 (Enum 기반 - 타입 안전)
+        /// 특정 씬으로 이동
         /// </summary>
         public void LoadScene(GameScene scene)
         {
             string sceneName = scene.ToString();
-            
+            Debug.Log($"[UIManager] 씬 로드 시작: {sceneName}");
+
             if (!IsSceneInBuildSettings(sceneName))
             {
                 Debug.LogError($"[UIManager] Scene '{sceneName}' is not in Build Settings!");
                 return;
             }
-            
-            Debug.Log($"[UIManager] Loading scene: {sceneName}");
+
             SceneManager.LoadScene(sceneName);
         }
 
         /// <summary>
-        /// 타이틀 화면으로 이동
+        /// 타이틀 씬으로 이동
         /// </summary>
         public void LoadTitleScene()
         {
             LoadScene(GameScene.Title);
-        }
-
-        /// <summary>
-        /// 게임 시작 (메인 게임플레이 씬으로 이동)
-        /// </summary>
-        public void LoadGameplayScene()
-        {
-            LoadScene(GameScene.Level_01_Gameplay);
-        }
-
-        /// <summary>
-        /// 현재 씬 재시작
-        /// </summary>
-        public void RestartCurrentScene()
-        {
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-        }
-
-        /// <summary>
-        /// 게임 종료
-        /// </summary>
-        public void QuitGame()
-        {
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#else
-            Application.Quit();
-#endif
         }
 
         /// <summary>
@@ -114,49 +95,132 @@ namespace EDNE.UI
 
         #endregion
 
-        #region Game Settings
+        #region Audio Settings
+
+        [Header("Audio Mixer (Optional)")]
+        [Tooltip("AudioMixer를 사용하려면 연결하세요")]
+        [SerializeField] private AudioMixer audioMixer;
 
         /// <summary>
-        /// 마스터 볼륨 설정
+        /// 마스터 볼륨 설정 (0~1)
         /// </summary>
-        public void SetMasterVolume(float volume)
+        public void SetMasterVolume(float value)
         {
-            AudioListener.volume = Mathf.Clamp01(volume);
-            PlayerPrefs.SetFloat("MasterVolume", volume);
+            value = Mathf.Clamp01(value);
+            
+            if (audioMixer != null)
+            {
+                // AudioMixer 사용 (-80dB ~ 0dB)
+                float volumeDB = value > 0 ? 20f * Mathf.Log10(value) : -80f;
+                audioMixer.SetFloat("MasterVolume", volumeDB);
+            }
+            else
+            {
+                // AudioListener 사용 (폴백)
+                AudioListener.volume = value;
+            }
+            
+            PlayerPrefs.SetFloat("MasterVolume", value);
             PlayerPrefs.Save();
+            Debug.Log($"[UIManager] 마스터 볼륨 설정: {value:F2}");
         }
 
         /// <summary>
-        /// 전체화면 토글
+        /// BGM 볼륨 설정 (0~1)
         /// </summary>
-        public void ToggleFullScreen()
+        public void SetBGMVolume(float value)
         {
-            Screen.fullScreen = !Screen.fullScreen;
-            PlayerPrefs.SetInt("FullScreen", Screen.fullScreen ? 1 : 0);
+            value = Mathf.Clamp01(value);
+            
+            if (audioMixer != null)
+            {
+                float volumeDB = value > 0 ? 20f * Mathf.Log10(value) : -80f;
+                audioMixer.SetFloat("BGMVolume", volumeDB);
+            }
+            
+            PlayerPrefs.SetFloat("BGMVolume", value);
             PlayerPrefs.Save();
+            Debug.Log($"[UIManager] BGM 볼륨 설정: {value:F2}");
+        }
+
+        /// <summary>
+        /// SFX 볼륨 설정 (0~1)
+        /// </summary>
+        public void SetSFXVolume(float value)
+        {
+            value = Mathf.Clamp01(value);
+            
+            if (audioMixer != null)
+            {
+                float volumeDB = value > 0 ? 20f * Mathf.Log10(value) : -80f;
+                audioMixer.SetFloat("SFXVolume", volumeDB);
+            }
+            
+            PlayerPrefs.SetFloat("SFXVolume", value);
+            PlayerPrefs.Save();
+            Debug.Log($"[UIManager] SFX 볼륨 설정: {value:F2}");
+        }
+
+        /// <summary>
+        /// 저장된 볼륨 설정 불러오기
+        /// </summary>
+        public float GetMasterVolume()
+        {
+            return PlayerPrefs.GetFloat("MasterVolume", 1f);
+        }
+
+        public float GetBGMVolume()
+        {
+            return PlayerPrefs.GetFloat("BGMVolume", 1f);
+        }
+
+        public float GetSFXVolume()
+        {
+            return PlayerPrefs.GetFloat("SFXVolume", 1f);
         }
 
         #endregion
 
-        #region Data Loading
+        #region Game Control
+
+        /// <summary>
+        /// 게임 종료
+        /// </summary>
+        public void QuitGame()
+        {
+            Debug.Log("[UIManager] 게임 종료");
+
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        #endregion
+
+        #region Utility
 
         private void Start()
         {
-            LoadSettings();
+            // 저장된 볼륨 설정 적용
+            LoadSavedAudioSettings();
         }
 
-        private void LoadSettings()
+        /// <summary>
+        /// 저장된 오디오 설정 불러오기
+        /// </summary>
+        private void LoadSavedAudioSettings()
         {
-            // 저장된 설정 로드
-            if (PlayerPrefs.HasKey("MasterVolume"))
-            {
-                AudioListener.volume = PlayerPrefs.GetFloat("MasterVolume");
-            }
+            float masterVolume = GetMasterVolume();
+            float bgmVolume = GetBGMVolume();
+            float sfxVolume = GetSFXVolume();
 
-            if (PlayerPrefs.HasKey("FullScreen"))
-            {
-                Screen.fullScreen = PlayerPrefs.GetInt("FullScreen") == 1;
-            }
+            SetMasterVolume(masterVolume);
+            SetBGMVolume(bgmVolume);
+            SetSFXVolume(sfxVolume);
+
+            Debug.Log($"[UIManager] 저장된 볼륨 적용 - Master: {masterVolume:F2}, BGM: {bgmVolume:F2}, SFX: {sfxVolume:F2}");
         }
 
         #endregion

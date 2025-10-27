@@ -364,3 +364,4 @@ button.OnClick.AddListener(...); // 효율적
 - 확장성 높음 ✓
 - 버그 적음 ✓
 
+
