@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Com.LuisPedroFonseca.ProCamera2D;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
@@ -27,6 +28,12 @@ public class PlayerController : EntityController
 
 	[Header("애니메이션")]
 	[SerializeField] private Animator animator;
+
+	[Header("카메라 쉐이크 (피격)")]
+	[Tooltip("피격 데미지에 따라 쉐이크 강도를 계산하는 SO")]
+	[SerializeField] private PlayerHitShakeSO hitShake;
+	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착)")]
+	[SerializeField] private ProCamera2DShake camShake;
 
 	[Header("입력 시스템")]
 	[Tooltip("Input Action Asset (Generate C# Class를 사용하지 않는 경우)")]
@@ -162,6 +169,12 @@ public class PlayerController : EntityController
 		if (animator == null)
 		{
 			animator = GetComponentInChildren<Animator>();
+		}
+
+		// 카메라 쉐이크 자동 할당 (없으면 찾기)
+		if (camShake == null)
+		{
+			camShake = FindObjectOfType<ProCamera2DShake>();
 		}
 	}
 
@@ -684,7 +697,11 @@ public class PlayerController : EntityController
 	{
 		base.OnDamaged(damageAmount, damageSource);
 		
-		// 피격 이펙트, 사운드 등 추가 가능
+		// 카메라 쉐이크: 데미지 크기에 비례
+		if (damageAmount > 0 && hitShake != null && camShake != null)
+		{
+			hitShake.ApplyShake(camShake, damageAmount);
+		}
 	}
 	
 	/// <summary>
