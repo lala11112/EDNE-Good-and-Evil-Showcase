@@ -8,6 +8,10 @@ public class MonsterFireballHandler : MonoBehaviour, SkillHandlerInterface
 {
     [Header("스킬 설정")]
     [SerializeField] private GameObject fireballPrefab; // 파이어볼 투사체 프리팹
+	[Tooltip("Reinforced Application: 한 방향으로 3연발 탄막 발사")]
+	[SerializeField] private bool reinforcedApplication = false;
+	[Tooltip("3연발 간격 (월드 유닛, 진행 방향의 수직 방향으로 좌우 오프셋)")]
+	[SerializeField] private float multiShotSpacing = 0.25f;
     
     private MonsterSkillData skillData;
     private GameObject ownerObject;
@@ -52,8 +56,8 @@ public class MonsterFireballHandler : MonoBehaviour, SkillHandlerInterface
             return;
         }
         
-        // 파이어볼 발사
-        ShootFireball();
+		// 파이어볼 발사
+		ShootFireball();
         
         // 스킬 종료 (즉시 발사 후 종료)
         Cleanup();
@@ -75,7 +79,7 @@ public class MonsterFireballHandler : MonoBehaviour, SkillHandlerInterface
     /// <summary>
     /// 파이어볼 발사
     /// </summary>
-    private void ShootFireball()
+	private void ShootFireball()
     {
         // 투사체 프리팹 확인
         GameObject projectilePrefab = fireballPrefab != null ? fireballPrefab : skillData.skillEffectPrefab;
@@ -89,28 +93,46 @@ public class MonsterFireballHandler : MonoBehaviour, SkillHandlerInterface
         // 발사 위치 (몬스터 위치)
         Vector3 spawnPos = ownerController.transform.position;
         
-        // 파이어볼 생성
-        GameObject fireball = Instantiate(projectilePrefab, spawnPos, Quaternion.identity);
-        
-        // ISkillProjectile 설정
-        ISkillProjectile projScript = fireball.GetComponent<ISkillProjectile>();
-        if (projScript != null)
-        {
-            projScript.SetSkillData(skillData.damage, skillData.projectileSpeed);
-            projScript.SetAttackerType(EntityType.Monster);
-            projScript.SetOwnerController(ownerController);
-        }
-        
-        // Rigidbody2D로 발사
-        Rigidbody2D rb = fireball.GetComponent<Rigidbody2D>();
-        if (rb != null)
-        {
-            Vector2 direction = (target.position - spawnPos).normalized;
-            rb.linearVelocity = direction * skillData.projectileSpeed;
-        }
-        
-        Debug.Log($"[MonsterFireballHandler] 파이어볼 발사! Damage: {skillData.damage}, Speed: {skillData.projectileSpeed}");
+		Vector2 direction = (target.position - spawnPos).normalized;
+		if (direction.sqrMagnitude < 0.000001f) direction = Vector2.right;
+
+		if (!reinforcedApplication)
+		{
+			SpawnAndFire(projectilePrefab, spawnPos, direction);
+			Debug.Log($"[MonsterFireballHandler] 파이어볼 발사! Damage: {skillData.damage}, Speed: {skillData.projectileSpeed}");
+		}
+		else
+		{
+			// 3연발: 진행 방향의 수직 벡터로 좌/중/우 오프셋
+			Vector2 perp = new Vector2(-direction.y, direction.x); // 좌측 수직
+			Vector3 leftPos = spawnPos + (Vector3)(perp * -multiShotSpacing);
+			Vector3 midPos = spawnPos;
+			Vector3 rightPos = spawnPos + (Vector3)(perp * multiShotSpacing);
+
+			SpawnAndFire(projectilePrefab, leftPos, direction);
+			SpawnAndFire(projectilePrefab, midPos, direction);
+			SpawnAndFire(projectilePrefab, rightPos, direction);
+
+			Debug.Log($"[MonsterFireballHandler] Reinforced 3연발 발사! Damage: {skillData.damage}, Spacing: {multiShotSpacing}");
+		}
     }
+
+	private void SpawnAndFire(GameObject projectilePrefab, Vector3 spawnPos, Vector2 direction)
+	{
+		GameObject fireball = Instantiate(projectilePrefab, spawnPos, Quaternion.identity);
+		ISkillProjectile projScript = fireball.GetComponent<ISkillProjectile>();
+		if (projScript != null)
+		{
+			projScript.SetSkillData(skillData.damage, skillData.projectileSpeed);
+			projScript.SetAttackerType(EntityType.Monster);
+			projScript.SetOwnerController(ownerController);
+		}
+		Rigidbody2D rb = fireball.GetComponent<Rigidbody2D>();
+		if (rb != null)
+		{
+			rb.linearVelocity = direction.normalized * skillData.projectileSpeed;
+		}
+	}
     
     #endregion
 }

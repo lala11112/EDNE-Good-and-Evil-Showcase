@@ -40,10 +40,7 @@ public class MonsterHealthBar : MonoBehaviour
 	[Tooltip("체력 표시를 즉시 갱신(보간 없음)")]
 	[SerializeField] private bool instantUpdate = true;
 
-	[Header("툴팁")]
-	[SerializeField] private bool enableTooltip = true;
-	[SerializeField] private string tooltipFormat = "{0}\nHP {1}/{2}"; // {name}, {cur}, {max}
-	[SerializeField] private Vector3 tooltipOffset = new Vector3(0f, 0.3f, 0f);
+// 툴팁 기능은 미사용으로 필드 제거
 
 	private EntityController entity;
 	private Collider2D col2d;
@@ -57,6 +54,8 @@ public class MonsterHealthBar : MonoBehaviour
 	private float baseSpriteWidthLocal = 0f; // sprite.bounds.size.x (local) * 1
 	private float initialLocalPosX = 0f;
 	private float initialLeftEdgeLocalX = 0f;
+	// 렌더러 캐시 (가시성 토글 시 콜라이더 비활성화를 피하기 위해)
+	private SpriteRenderer[] spriteRenderers;
 
 	private void Awake()
 	{
@@ -100,6 +99,12 @@ public class MonsterHealthBar : MonoBehaviour
 					initialLeftEdgeLocalX = initialLocalPosX - (initialLocalWidth * 0.5f);
 				}
 			}
+		}
+
+		// 가시성 토글용 렌더러 캐시
+		if (spriteRoot != null)
+		{
+			spriteRenderers = spriteRoot.GetComponentsInChildren<SpriteRenderer>(true);
 		}
 	}
 
@@ -219,7 +224,18 @@ public class MonsterHealthBar : MonoBehaviour
 
 	private void SetVisible(bool v)
 	{
-		if (spriteRoot != null) spriteRoot.SetActive(v);
+		// GameObject 활성/비활성 대신 렌더러만 토글하여 콜라이더/논렌더 컴포넌트에는 영향 주지 않음
+		if (spriteRenderers == null || spriteRenderers.Length == 0)
+		{
+			if (spriteRoot != null) spriteRenderers = spriteRoot.GetComponentsInChildren<SpriteRenderer>(true);
+		}
+		if (spriteRenderers != null)
+		{
+			for (int i = 0; i < spriteRenderers.Length; i++)
+			{
+				if (spriteRenderers[i] != null) spriteRenderers[i].enabled = v;
+			}
+		}
 	}
 }
 
