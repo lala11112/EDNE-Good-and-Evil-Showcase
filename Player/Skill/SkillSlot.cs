@@ -108,20 +108,31 @@ public class SkillSlot : MonoBehaviour
             return;
         }
         
-        if (isOnCooldown)
-        {
-            Debug.Log($"{currentSkillData.skillName} 스킬이 쿨타임 중입니다! ({currentCooldown:F1}초 남음)");
-            return;
-        }
-        
         if (handler == null)
         {
             Debug.LogWarning("핸들러가 없습니다.");
             return;
         }
 
+        // ⭐ FaithDashHandler 특수 처리
+        FaithDashHandler faithDashHandler = handler as FaithDashHandler;
+        bool isFaithDash = (faithDashHandler != null);
+        bool isFaithDashRecharging = (isFaithDash && faithDashHandler.IsInRechargeMode);
+        
+        // 쿨타임 체크 (FaithDash는 재사용 모드 종료 후에만 쿨타임 적용)
+        if (isOnCooldown)
+        {
+            Debug.Log($"{currentSkillData.skillName} 스킬이 쿨타임 중입니다! ({currentCooldown:F1}초 남음)");
+            return;
+        }
+
         handler.Use(rank);
-        StartCooldown();
+        
+        // 쿨타임 시작 (FaithDash는 재사용 모드 종료 시 시작하므로 여기서는 시작 안 함)
+        if (!isFaithDash)
+        {
+            StartCooldown();
+        }
     }
     
     private void StartCooldown()
@@ -130,5 +141,14 @@ public class SkillSlot : MonoBehaviour
         currentCooldown = currentSkillData.cooldown;
         
         Debug.Log($"{currentSkillData.skillName} 쿨타임 시작: {currentCooldown}초");
+    }
+    
+    /// <summary>
+    /// 외부(핸들러)에서 쿨타임 시작 요청
+    /// 신념질주 같은 재사용 스킬이 모드 종료 시 호출
+    /// </summary>
+    public void StartCooldownFromHandler()
+    {
+        StartCooldown();
     }
 }

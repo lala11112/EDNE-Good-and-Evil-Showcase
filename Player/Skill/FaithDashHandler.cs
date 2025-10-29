@@ -9,6 +9,15 @@ using System.Linq;
 /// </summary>
 public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 {
+	#region 표식 UI 추적
+	
+	/// <summary>
+	/// 표식된 적과 UI를 매핑하는 딕셔너리
+	/// </summary>
+	private Dictionary<EntityController, GameObject> markedEnemyUIs = new Dictionary<EntityController, GameObject>();
+	
+	#endregion
+	
 	#region 기본 설정
 	
 	[Header("기본 데이터")]
@@ -20,6 +29,9 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("플레이어 컨트롤러")]
 	private PlayerController playerController;
+	
+	[Tooltip("스킬 슬롯 (쿨타임 제어용)")]
+	private SkillSlot skillSlot;
 	
 	#endregion
 	
@@ -46,8 +58,11 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	#region 돌진 설정
 	
 	[Header("돌진 설정")]
-	[Tooltip("돌진 거리 (적 뒤로 이동할 거리)")]
-	[SerializeField] private float dashDistance = 2f;
+	[Tooltip("적 뒤 오프셋 거리 (적 바로 뒤에 얼마나 떨어져서 정지할지)")]
+	[SerializeField] private float behindTargetOffset = 0.5f;
+	
+	[Tooltip("방향 돌진 거리 (타겟 없을 때)")]
+	[SerializeField] private float dashDistance = 4f;
 	
 	[Tooltip("돌진 속도")]
 	[SerializeField] private float dashSpeed = 25f;
@@ -89,6 +104,11 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	private int currentRechargeCount = 0;
 	private float remainingTime = 0f;
 	
+	// 외부 접근용 프로퍼티
+	public bool IsInRechargeMode => isInRechargeMode;
+	public int CurrentRechargeCount => currentRechargeCount;
+	public float RemainingTime => remainingTime;
+	
 	#endregion
 	
 	#region S랭크 설정
@@ -117,9 +137,6 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("방향 일치 판정 각도 (도)")]
 	[SerializeField] private float directionThreshold = 45f;
 	
-	[Tooltip("적 레이어")]
-	[SerializeField] private LayerMask enemyLayer;
-	
 	#endregion
 	
 	#region 비주얼 이펙트
@@ -133,6 +150,12 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("재사용 준비 이펙트 (플레이어에 부착)")]
 	[SerializeField] private GameObject rechargeReadyEffectPrefab;
+	
+	[Tooltip("표식 UI 프리팹 (적 위에 표시)")]
+	[SerializeField] private GameObject markUIPrefab;
+	
+	[Tooltip("표식 UI 오프셋 (적 위에서 얼마나 위에 표시할지)")]
+	[SerializeField] private Vector3 markUIOffset = new Vector3(0f, 1f, 0f);
 	
 	private GameObject activeRechargeEffect;
 	
@@ -169,6 +192,9 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			Debug.LogError("[FaithDashHandler] PlayerController를 찾을 수 없습니다!");
 		}
+		
+		// SkillSlot 찾기 (쿨타임 제어용)
+		skillSlot = GetComponentInParent<SkillSlot>();
 	}
 	
 	/// <summary>
@@ -201,6 +227,19 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			Destroy(activeRechargeEffect);
 		}
+		
+		// 모든 표식 UI 제거
+		ClearAllMarkUIs();
+	}
+	
+	#endregion
+	
+	#region Unity Lifecycle
+	
+	private void Update()
+	{
+		// 표식 UI 위치 업데이트 및 상태 확인
+		UpdateMarkUIs();
 	}
 	
 	#endregion
@@ -212,6 +251,9 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ExecuteInitialShot(SkillRank rank)
 	{
+		// ⭐ 이전 표식 모두 제거 (새 수리검 발사 시)
+		RemoveAllMarksFromEnemies();
+		
 		// S랭크 모드 확인
 		isInSRankMode = (rank == SkillRank.S);
 		
@@ -286,10 +328,10 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		// 범위 지정이 있으면 범위 내, 없으면 전체
 		if (sRankMarkRange > 0)
 		{
+			// 범위 내 모든 Collider 탐색
 			enemies = Physics2D.OverlapCircleAll(
 				playerController.transform.position,
-				sRankMarkRange,
-				enemyLayer
+				sRankMarkRange
 			);
 		}
 		else
@@ -306,7 +348,8 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		foreach (Collider2D enemyCollider in enemies)
 		{
 			EntityController enemy = enemyCollider.GetComponent<EntityController>();
-			if (enemy != null && enemy.IsAlive)
+			// EntityController가 있고, 플레이어가 아니고, 살아있는 적에게만 표식 적용
+			if (enemy != null && enemy.EntityType != EntityType.Player && enemy.IsAlive)
 			{
 				enemy.ApplyStatusEffect(markEffect);
 			}
@@ -377,6 +420,12 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			Destroy(activeRechargeEffect);
 			activeRechargeEffect = null;
 		}
+		
+		// ⭐ 재사용 모드 종료 시 쿨타임 시작
+		if (skillSlot != null)
+		{
+			skillSlot.StartCooldownFromHandler();
+		}
 	}
 	
 	/// <summary>
@@ -429,19 +478,19 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		// 타겟 선택
 		EntityController target = SelectDashTarget();
 		
-		// 타겟이 없으면 바라보는 방향으로 돌진
+		// 돌진 목표 위치 계산
 		Vector3 dashTargetPos;
 		if (target != null)
 		{
-			// 타겟 뒤로 이동할 위치 계산
+			// 타겟의 바로 뒤로 이동 (플레이어→적 방향)
 			Vector2 directionToTarget = (target.transform.position - playerController.transform.position).normalized;
-			dashTargetPos = target.transform.position + (Vector3)directionToTarget * dashDistance;
+			dashTargetPos = target.transform.position + (Vector3)directionToTarget * behindTargetOffset;
 		}
 		else
 		{
 			// 바라보는 방향으로 직선 돌진
 			Vector2 direction = playerController.GetLastDirectionVector();
-			dashTargetPos = playerController.transform.position + (Vector3)direction * dashDistance * 2f;
+			dashTargetPos = playerController.transform.position + (Vector3)direction * dashDistance;
 		}
 		
 		// 돌진 시작
@@ -466,18 +515,18 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private EntityController SelectDashTarget()
 	{
-		// 모든 살아있는 적 탐색
-		Collider2D[] enemyColliders = Physics2D.OverlapCircleAll(
+		// 모든 살아있는 적 탐색 (모든 Collider 검색)
+		Collider2D[] allColliders = Physics2D.OverlapCircleAll(
 			playerController.transform.position,
-			detectionRange,
-			enemyLayer
+			detectionRange
 		);
 		
 		List<EntityController> enemies = new List<EntityController>();
-		foreach (Collider2D col in enemyColliders)
+		foreach (Collider2D col in allColliders)
 		{
 			EntityController enemy = col.GetComponent<EntityController>();
-			if (enemy != null && enemy.IsAlive)
+			// EntityController가 있고, 플레이어가 아니고, 살아있는 적만 추가
+			if (enemy != null && enemy.EntityType != EntityType.Player && enemy.IsAlive)
 			{
 				enemies.Add(enemy);
 			}
@@ -485,47 +534,30 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		
 		if (enemies.Count == 0) return null;
 		
-		// 표식이 있는 적 필터링
+		// 표식이 있는 적만 필터링
 		List<EntityController> markedEnemies = enemies
 			.Where(e => HasMark(e))
 			.ToList();
+		
+		// 표식이 있는 적이 없으면 null 반환 (방향으로만 돌진)
+		if (markedEnemies.Count == 0) return null;
 		
 		// 플레이어가 바라보는 방향
 		Vector2 playerDirection = playerController.GetLastDirectionVector();
 		
 		// 우선순위 1: 바라보는 방향 + 표식 있음 + 체력 가장 낮음
-		if (markedEnemies.Count > 0)
+		List<EntityController> markedInDirection = markedEnemies
+			.Where(e => IsInDirection(e.transform.position, playerDirection))
+			.OrderBy(e => e.CurrentHealth)
+			.ToList();
+		
+		if (markedInDirection.Count > 0)
 		{
-			List<EntityController> markedInDirection = markedEnemies
-				.Where(e => IsInDirection(e.transform.position, playerDirection))
-				.OrderBy(e => e.CurrentHealth)
-				.ToList();
-			
-			if (markedInDirection.Count > 0)
-			{
-				return markedInDirection[0];
-			}
+			return markedInDirection[0];
 		}
 		
 		// 우선순위 2: 표식 있음 + 체력 가장 낮음 (방향 무관)
-		if (markedEnemies.Count > 0)
-		{
-			return markedEnemies.OrderBy(e => e.CurrentHealth).First();
-		}
-		
-		// 우선순위 3: 바라보는 방향의 가장 가까운 적
-		List<EntityController> enemiesInDirection = enemies
-			.Where(e => IsInDirection(e.transform.position, playerDirection))
-			.OrderBy(e => Vector2.Distance(playerController.transform.position, e.transform.position))
-			.ToList();
-		
-		if (enemiesInDirection.Count > 0)
-		{
-			return enemiesInDirection[0];
-		}
-		
-		// 우선순위 4: 타겟 없음 (방향으로만 돌진)
-		return null;
+		return markedEnemies.OrderBy(e => e.CurrentHealth).First();
 	}
 	
 	/// <summary>
@@ -601,27 +633,41 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			// 이동
 			playerController.transform.position = Vector3.Lerp(startPos, targetPos, t);
 			
-			// 충돌 감지
+			// 충돌 감지 (모든 Collider 탐색)
 			Collider2D[] hits = Physics2D.OverlapCircleAll(
 				playerController.transform.position,
-				dashCollisionRadius,
-				enemyLayer
+				dashCollisionRadius
 			);
 			
 			foreach (Collider2D hit in hits)
 			{
+				// EntityController가 있는 대상만 처리
 				EntityController enemy = hit.GetComponent<EntityController>();
-				if (enemy != null && enemy.IsAlive && !hitEnemies.Contains(enemy))
+				if (enemy == null) continue;
+				
+				// 플레이어 자신은 무시
+				if (enemy.EntityType == EntityType.Player) continue;
+				
+				// 죽은 적이나 이미 히트한 적은 무시
+				if (!enemy.IsAlive || hitEnemies.Contains(enemy)) continue;
+				
+				// 표식 확인 (데미지 전에 체크)
+				bool hadMark = HasMark(enemy);
+				
+				// 데미지 적용
+				enemy.ApplyDamage((int)finalDamage, EntityType.Player);
+				hitEnemies.Add(enemy);
+				
+				// 적이 죽었는지 확인
+				if (!enemy.IsAlive)
 				{
-					// 데미지 적용
-					enemy.ApplyDamage((int)finalDamage, EntityType.Player);
-					hitEnemies.Add(enemy);
-					
-					// 적이 죽었는지 확인
-					if (!enemy.IsAlive)
-					{
-						OnEnemyKilled(enemy);
-					}
+					// 죽은 적은 OnEnemyKilled에서 보너스 처리 후 표식 자동 제거됨 (Update에서)
+					OnEnemyKilled(enemy);
+				}
+				else if (hadMark && markEffect != null)
+				{
+					// 살아있는 적의 표식만 제거 (돌진으로 히트하면 표식 소모)
+					enemy.RemoveStatusEffect(markEffect);
 				}
 			}
 			
@@ -677,6 +723,136 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			AddRechargeTime(sRankTimeOnKill);
 		}
+	}
+	
+	#endregion
+	
+	#region 표식 관리
+	
+	/// <summary>
+	/// 모든 적에게서 표식 제거
+	/// </summary>
+	private void RemoveAllMarksFromEnemies()
+	{
+		if (markEffect == null) return;
+		
+		// 씬의 모든 적 탐색
+		EntityController[] allEntities = FindObjectsByType<EntityController>(FindObjectsSortMode.None);
+		
+		foreach (EntityController entity in allEntities)
+		{
+			// 플레이어나 죽은 적은 무시
+			if (entity.EntityType == EntityType.Player || !entity.IsAlive) continue;
+			
+			// 표식이 있으면 제거
+			if (HasMark(entity))
+			{
+				entity.RemoveStatusEffect(markEffect);
+			}
+		}
+	}
+	
+	#endregion
+	
+	#region 표식 UI 관리
+	
+	/// <summary>
+	/// 표식 UI 위치 업데이트 및 상태 확인
+	/// </summary>
+	private void UpdateMarkUIs()
+	{
+		if (markEffect == null || markUIPrefab == null) return;
+		
+		// 씬의 모든 적 탐색
+		EntityController[] allEntities = FindObjectsByType<EntityController>(FindObjectsSortMode.None);
+		
+		foreach (EntityController entity in allEntities)
+		{
+			// 플레이어나 죽은 적은 무시
+			if (entity.EntityType == EntityType.Player || !entity.IsAlive)
+			{
+				// 죽은 적의 UI 제거
+				RemoveMarkUI(entity);
+				continue;
+			}
+			
+			// 표식 확인
+			bool hasMarkEffect = HasMark(entity);
+			
+			if (hasMarkEffect)
+			{
+				// 표식이 있으면 UI 생성 또는 위치 업데이트
+				if (!markedEnemyUIs.ContainsKey(entity))
+				{
+					CreateMarkUI(entity);
+				}
+				else
+				{
+					UpdateMarkUIPosition(entity);
+				}
+			}
+			else
+			{
+				// 표식이 없으면 UI 제거
+				RemoveMarkUI(entity);
+			}
+		}
+	}
+	
+	/// <summary>
+	/// 표식 UI 생성
+	/// </summary>
+	private void CreateMarkUI(EntityController enemy)
+	{
+		if (markUIPrefab == null || enemy == null) return;
+		
+		GameObject markUI = Instantiate(markUIPrefab);
+		markUI.transform.position = enemy.transform.position + markUIOffset;
+		markedEnemyUIs[enemy] = markUI;
+	}
+	
+	/// <summary>
+	/// 표식 UI 위치 업데이트
+	/// </summary>
+	private void UpdateMarkUIPosition(EntityController enemy)
+	{
+		if (!markedEnemyUIs.ContainsKey(enemy)) return;
+		
+		GameObject markUI = markedEnemyUIs[enemy];
+		if (markUI != null && enemy != null)
+		{
+			markUI.transform.position = enemy.transform.position + markUIOffset;
+		}
+	}
+	
+	/// <summary>
+	/// 표식 UI 제거
+	/// </summary>
+	private void RemoveMarkUI(EntityController enemy)
+	{
+		if (!markedEnemyUIs.ContainsKey(enemy)) return;
+		
+		GameObject markUI = markedEnemyUIs[enemy];
+		if (markUI != null)
+		{
+			Destroy(markUI);
+		}
+		markedEnemyUIs.Remove(enemy);
+	}
+	
+	/// <summary>
+	/// 모든 표식 UI 제거
+	/// </summary>
+	private void ClearAllMarkUIs()
+	{
+		foreach (var kvp in markedEnemyUIs)
+		{
+			if (kvp.Value != null)
+			{
+				Destroy(kvp.Value);
+			}
+		}
+		markedEnemyUIs.Clear();
 	}
 	
 	#endregion

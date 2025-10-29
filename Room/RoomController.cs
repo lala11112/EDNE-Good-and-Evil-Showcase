@@ -89,7 +89,7 @@ public class RoomController : MonoBehaviour
     {
         if (roomData == null)
         {
-            Debug.LogError($"[RoomController] {gameObject.name}에 RoomControllerSO가 설정되지 않았습니다!");
+            Debug.LogWarning($"[RoomController] {gameObject.name}에 RoomControllerSO가 설정되지 않았습니다!");
             return;
         }
 
