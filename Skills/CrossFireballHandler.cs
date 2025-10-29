@@ -63,6 +63,22 @@ public class CrossFireballHandler : MonoBehaviour, SkillHandlerInterface
 		Vector3 origin = ownerController.transform.position;
 		Vector3[] dirs = GetDirections();
 
+		// 경고바가 표시되는 동안 이동을 잠그고, NavMeshAgent 관성을 즉시 제거
+		if (ownerController != null)
+		{
+			// 경고 시간 동안만 잠금
+			ownerController.LockMovement(warningDuration);
+
+			// NavMeshAgent 강제 정지 (관성 제거)
+			UnityEngine.AI.NavMeshAgent agent = ownerController.GetComponent<UnityEngine.AI.NavMeshAgent>();
+			if (agent != null)
+			{
+				agent.isStopped = true;
+				agent.velocity = Vector3.zero;
+				Debug.Log("[CrossFireballHandler] NavMeshAgent 강제 정지 완료");
+			}
+		}
+
 		// 1) 경고 바 생성
 		GameObject[] warnings = new GameObject[4];
 		for (int i = 0; i < 4; i++)

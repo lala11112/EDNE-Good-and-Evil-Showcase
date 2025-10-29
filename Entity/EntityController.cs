@@ -79,6 +79,9 @@ public class EntityController : MonoBehaviour
 
 	#region 프로퍼티 (읽기 전용)
 
+	public event System.Action<int,int> OnHealthChanged;
+    public event System.Action<EntityController> OnDied;
+
 	/// <summary>생존 여부</summary>
 	public bool IsAlive => isAlive;
 
