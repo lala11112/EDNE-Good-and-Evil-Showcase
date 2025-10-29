@@ -19,6 +19,23 @@ public class SkillSlot : MonoBehaviour
     private GameObject handlerGO;         // 인스턴스
     [SerializeField] private GameObject owner; // 플레이어 오브젝트 참조(없으면 transform.root 등)
 
+    private void Awake()
+    {
+        // owner가 설정되지 않았으면 자동으로 찾기
+        if (owner == null)
+        {
+            // 부모에서 PlayerController 찾기
+            PlayerController playerController = GetComponentInParent<PlayerController>();
+            if (playerController != null)
+            {
+                owner = playerController.gameObject;
+            }
+            else
+            {
+                Debug.LogWarning("[SkillSlot] PlayerController를 찾을 수 없습니다. owner를 수동으로 설정해주세요.");
+            }
+        }
+    }
 
     private void Update()
     {
