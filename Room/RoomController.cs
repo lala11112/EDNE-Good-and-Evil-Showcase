@@ -46,7 +46,7 @@ public class RoomController : MonoBehaviour
     
     // 디버그 관련 변수
     private float debugTimer = 0f;
-    private const float DEBUG_INTERVAL = 10f; // 10초마다
+    private const float DEBUG_INTERVAL = 3f; // 10초마다
 
     // 이벤트
     public System.Action<RoomController> OnRoomEntered;
@@ -234,6 +234,7 @@ public class RoomController : MonoBehaviour
         }
 
         // 웨이브 완료 대기
+        yield return new WaitForSeconds(waveData.spawnInterval+1);
         StartCoroutine(WaitForWaveCompletion(waveData));
     }
 
@@ -276,12 +277,16 @@ public class RoomController : MonoBehaviour
     /// </summary>
     private IEnumerator WaitForWaveCompletion(WaveData waveData)
     {
-        // 몬스터 처치 대기
+        // 몬스터 처치 대기 - 몬스터가 지정된 수 이하로 남았을 때 다음 웨이브 시작
+        Debug.Log($"[RoomController] 웨이브 완료 대기 중... 현재 몬스터: {currentMonsters.Count}, 다음 웨이브 시작 조건: {roomData.remainingMonstersForNextWave}마리 이하");
+        
         while (currentMonsters.Count > roomData.remainingMonstersForNextWave)
         {
             yield return null;
         }
 
+        Debug.Log($"[RoomController] 웨이브 완료 조건 달성! 현재 몬스터: {currentMonsters.Count}마리");
+        
         // 다음 웨이브 카운트 시작
         StartCoroutine(NextWaveCountdown(waveData));
     }

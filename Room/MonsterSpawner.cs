@@ -207,8 +207,8 @@ public class MonsterSpawner : MonoBehaviour
         
         // 스폰 반경 내 랜덤 위치
         Vector2 randomOffset = Random.insideUnitCircle * spawnRadius;
-        Vector3 spawnPosition = basePosition + new Vector3(randomOffset.x, 0f, randomOffset.y);
-        
+        Vector3 spawnPosition = basePosition + new Vector3(randomOffset.x, randomOffset.y, 0f);
+        Debug.Log("basePosition :" + basePosition + " / randomOffset :" + randomOffset + " / spawnPosition :" + spawnPosition);
         return spawnPosition;
     }
 

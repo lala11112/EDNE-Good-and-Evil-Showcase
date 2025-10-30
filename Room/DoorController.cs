@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 /// <summary>
 /// 문 컨트롤러
@@ -26,6 +27,17 @@ public class DoorController : MonoBehaviour
     [Tooltip("문이 잠겨있는지")]
     [SerializeField] private bool isLocked = false;
 
+    [Header("방향 제한 설정")]
+    [Tooltip("방향 제한을 사용할지")]
+    [SerializeField] private bool useDirectionRestriction = false;
+    
+    [Tooltip("허용할 방향 (Vector2)")]
+    [SerializeField] private Vector2 allowedDirection = Vector2.right;
+    
+    [Tooltip("방향 허용 오차 각도 (도)")]
+    [Range(0f, 180f)]
+    [SerializeField] private float directionTolerance = 45f;
+
     [Header("시각적 요소")]
     [Tooltip("문 스프라이트 렌더러")]
     [SerializeField] private SpriteRenderer doorSprite;
@@ -47,6 +59,9 @@ public class DoorController : MonoBehaviour
     private Coroutine doorAnimationCoroutine;
     private Vector3 originalPosition;
     private bool isAnimating = false;
+
+    // 방향 감지 관련
+    private Dictionary<Collider2D, Vector2> lastPositions = new Dictionary<Collider2D, Vector2>();
 
     // 이벤트
     public System.Action<DoorController> OnDoorOpened;
@@ -295,5 +310,130 @@ public class DoorController : MonoBehaviour
         
         OnDoorClosed?.Invoke(this);
         Debug.Log($"[DoorController] {doorName} 강제 닫힘");
+    }
+
+    /// <summary>
+    /// 방향이 허용되는지 확인
+    /// </summary>
+    /// <param name="movementDirection">이동 방향</param>
+    /// <returns>허용되는 방향인지</returns>
+    private bool IsDirectionAllowed(Vector2 movementDirection)
+    {
+        if (!useDirectionRestriction) return true;
+
+        // 방향 벡터 정규화
+        Vector2 normalizedMovement = movementDirection.normalized;
+        Vector2 normalizedAllowed = allowedDirection.normalized;
+
+        // 내적을 사용해서 각도 계산
+        float dot = Vector2.Dot(normalizedMovement, normalizedAllowed);
+        float angle = Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)) * Mathf.Rad2Deg;
+
+        return angle <= directionTolerance;
+    }
+
+    /// <summary>
+    /// 이동 방향 계산
+    /// </summary>
+    /// <param name="collider">충돌체</param>
+    /// <returns>이동 방향</returns>
+    private Vector2 CalculateMovementDirection(Collider2D collider)
+    {
+        Vector2 currentPosition = collider.transform.position;
+        
+        if (lastPositions.ContainsKey(collider))
+        {
+            Vector2 lastPosition = lastPositions[collider];
+            Vector2 movementDirection = currentPosition - lastPosition;
+            lastPositions[collider] = currentPosition;
+            return movementDirection;
+        }
+        else
+        {
+            lastPositions[collider] = currentPosition;
+            return Vector2.zero;
+        }
+    }
+
+    /// <summary>
+    /// 트리거 진입 시 호출
+    /// </summary>
+    /// <param name="other">충돌한 오브젝트</param>
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (!isOpen) return;
+
+        // 플레이어 태그 확인 (필요에 따라 수정)
+        if (other.CompareTag("Player"))
+        {
+            Vector2 movementDirection = CalculateMovementDirection(other);
+            
+            if (!IsDirectionAllowed(movementDirection))
+            {
+                // 허용되지 않는 방향이면 통과 차단
+                Debug.Log($"[DoorController] {doorName} - 허용되지 않는 방향으로 접근 시도: {movementDirection}");
+                
+                // 콜라이더를 일시적으로 비활성화하여 통과 차단
+                if (doorCollider != null)
+                {
+                    doorCollider.isTrigger = false;
+                    
+                    // 짧은 시간 후 다시 트리거로 설정
+                    StartCoroutine(ReEnableTriggerAfterDelay());
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 트리거에서 나갈 때 호출
+    /// </summary>
+    /// <param name="other">충돌한 오브젝트</param>
+    private void OnTriggerExit2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            // 플레이어가 나가면 위치 기록 초기화
+            if (lastPositions.ContainsKey(other))
+            {
+                lastPositions.Remove(other);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 트리거 재활성화 지연 코루틴
+    /// </summary>
+    private IEnumerator ReEnableTriggerAfterDelay()
+    {
+        yield return new WaitForSeconds(0.1f);
+        
+        if (doorCollider != null && isOpen)
+        {
+            doorCollider.isTrigger = true;
+        }
+    }
+
+    /// <summary>
+    /// 방향 제한 설정
+    /// </summary>
+    /// <param name="direction">허용할 방향</param>
+    /// <param name="tolerance">허용 오차 각도</param>
+    public void SetDirectionRestriction(Vector2 direction, float tolerance = 45f)
+    {
+        useDirectionRestriction = true;
+        allowedDirection = direction;
+        directionTolerance = tolerance;
+        
+        Debug.Log($"[DoorController] {doorName} 방향 제한 설정: {direction}, 허용 오차: {tolerance}도");
+    }
+
+    /// <summary>
+    /// 방향 제한 해제
+    /// </summary>
+    public void RemoveDirectionRestriction()
+    {
+        useDirectionRestriction = false;
+        Debug.Log($"[DoorController] {doorName} 방향 제한 해제");
     }
 }

@@ -37,8 +37,8 @@ public class RoomControllerSO : ScriptableObject
 
     [Header("웨이브 전환 설정")]
     [Tooltip("몬스터가 몇 마리 남았을 때 다음 웨이브 카운트 시작")]
-    [Range(1, 10)]
-    public int remainingMonstersForNextWave = 2;
+    [Range(0, 10)]
+    public int remainingMonstersForNextWave=0;
     
     [Tooltip("다음 웨이브까지 대기 시간")]
     [Range(1f, 10f)]
