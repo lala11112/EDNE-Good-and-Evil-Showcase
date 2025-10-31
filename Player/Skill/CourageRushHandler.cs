@@ -33,6 +33,10 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("대쉬 중 무적 여부")]
 	[SerializeField] private bool invincibleDuringDash = true;
 	
+	[Header("충돌 감지")]
+	[Tooltip("충돌을 감지할 레이어 (벽, 장애물 등)")]
+	[SerializeField] private LayerMask obstacleLayerMask = -1;
+	
 	#endregion
 	
 	#region AOE 설정
@@ -179,6 +183,16 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private IEnumerator ExecuteDash(SkillRank rank)
 	{
+		// 0. Rigidbody2D 가져오기 및 물리 상태 초기화
+		Rigidbody2D rb = playerController.GetComponent<Rigidbody2D>();
+		Vector2 originalVelocity = Vector2.zero;
+		
+		if (rb != null)
+		{
+			originalVelocity = rb.linearVelocity;
+			rb.linearVelocity = Vector2.zero; // 대쉬 시작 전 속도 초기화
+		}
+		
 		// 1. 대쉬 거리 결정
 		float dashDistance = isRechargeAvailable ? secondDashDistance : firstDashDistance;
 		
@@ -189,43 +203,151 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		Vector3 startPos = playerController.transform.position;
 		Vector3 targetPos = startPos + (Vector3)(dashDirection * dashDistance);
 		
-		// 4. 장애물 체크 (벽을 뚫지 않도록)
-		RaycastHit2D hit = Physics2D.Raycast(startPos, dashDirection, dashDistance, LayerMask.GetMask("Wall"));
-		if (hit.collider != null)
+		// 4. 플레이어의 콜라이더 크기 가져오기 (충돌 체크용)
+		Collider2D playerCollider = playerController.GetComponent<Collider2D>();
+		float colliderRadius = 0.5f; // 기본값
+		if (playerCollider != null)
 		{
-			targetPos = hit.point - dashDirection * 0.5f; // 벽 직전에 멈춤
+			if (playerCollider is CircleCollider2D circleCollider)
+			{
+				colliderRadius = circleCollider.radius * playerController.transform.localScale.x;
+			}
+			else if (playerCollider is CapsuleCollider2D capsuleCollider)
+			{
+				colliderRadius = Mathf.Max(capsuleCollider.size.x, capsuleCollider.size.y) * 0.5f * playerController.transform.localScale.x;
+			}
+			else if (playerCollider is BoxCollider2D boxCollider)
+			{
+				colliderRadius = Mathf.Max(boxCollider.size.x, boxCollider.size.y) * 0.5f * playerController.transform.localScale.x;
+			}
 		}
 		
-		// 5. 무적 설정
+		// 5. 장애물 체크 (벽, 장애물만 감지, 트리거 제외)
+		// CircleCast를 사용하여 플레이어 크기를 고려한 충돌 체크
+		RaycastHit2D hit = Physics2D.CircleCast(
+			startPos, 
+			colliderRadius * 0.95f, // 약간 작게 하여 정밀도 향상
+			dashDirection, 
+			dashDistance, 
+			obstacleLayerMask, // 설정한 레이어만 감지
+			-Mathf.Infinity, 
+			Mathf.Infinity
+		);
+		
+		// 장애물 감지 시 해당 지점까지만 이동
+		if (hit.collider != null)
+		{
+			// 벽 직전에 멈춤 (충분한 여유 공간 확보하여 끼임 방지)
+			float safeDistance = Mathf.Max(0, hit.distance - colliderRadius * 0.5f);
+			targetPos = startPos + (Vector3)(dashDirection * safeDistance);
+			
+			Debug.Log($"[CourageRush] 장애물 감지! 거리: {hit.distance}, 안전 거리: {safeDistance}");
+		}
+		
+		// 6. 무적 설정
 		if (invincibleDuringDash)
 		{
 			playerController.SetInvincible(true);
 		}
 		
-		// 6. 대쉬 이동
-		float dashDuration = Vector2.Distance(startPos, targetPos) / dashSpeed;
+		// 7. 대쉬 이동 (매 프레임마다 충돌 체크)
+		float totalDistance = Vector2.Distance(startPos, targetPos);
+		
+		// 목표 지점이 시작 지점과 거의 같다면 (벽에 막혔다면) 대쉬하지 않음
+		if (totalDistance < 0.1f)
+		{
+			if (invincibleDuringDash)
+			{
+				playerController.SetInvincible(false);
+			}
+			
+			// 물리 상태 복원
+			if (rb != null)
+			{
+				rb.linearVelocity = Vector2.zero;
+			}
+			
+			Debug.Log("[CourageRush] 대쉬 거리가 너무 짧아 취소됨");
+			yield break;
+		}
+		
+		float dashDuration = totalDistance / dashSpeed;
 		float elapsedTime = 0f;
+		Vector3 currentPos = startPos;
 		
 		while (elapsedTime < dashDuration)
 		{
 			elapsedTime += Time.deltaTime;
-			float t = elapsedTime / dashDuration;
-			playerController.transform.position = Vector3.Lerp(startPos, targetPos, t);
+			float t = Mathf.Clamp01(elapsedTime / dashDuration);
+			Vector3 nextPos = Vector3.Lerp(startPos, targetPos, t);
+			
+			// 다음 위치로 이동 가능한지 체크
+			Vector2 moveDirection = (nextPos - currentPos).normalized;
+			float moveDistance = Vector3.Distance(currentPos, nextPos);
+			
+			if (moveDistance > 0.001f) // 이동 거리가 있을 때만 체크
+			{
+				// 장애물 레이어만 체크 (트리거 자동 무시)
+				RaycastHit2D moveHit = Physics2D.CircleCast(
+					currentPos, 
+					colliderRadius * 0.9f, // 약간 작게 체크
+					moveDirection, 
+					moveDistance,
+					obstacleLayerMask // 장애물 레이어만
+				);
+				
+				// 장애물에 부딪혔다면 해당 위치에서 멈춤
+				if (moveHit.collider != null)
+				{
+					// 충돌 지점 직전까지만 이동 (충분한 여유 공간 확보)
+					float safeDistance = Mathf.Max(0, moveHit.distance - colliderRadius * 0.6f);
+					if (safeDistance > 0.001f)
+					{
+						nextPos = currentPos + (Vector3)(moveDirection * safeDistance);
+						playerController.transform.position = nextPos;
+					}
+					
+					Debug.Log($"[CourageRush] 대쉬 중 장애물 충돌! 정지");
+					break; // 대쉬 중단
+				}
+			}
+			
+			currentPos = nextPos;
+			playerController.transform.position = currentPos;
 			yield return null;
 		}
 		
-		playerController.transform.position = targetPos;
+		// 최종 위치 확정 및 안전성 검증
+		Vector3 finalPosition = playerController.transform.position;
 		
-		// 7. 무적 해제
+		// 최종 위치에서 주변 장애물 체크 (벽에 끼이지 않았는지 확인)
+		Collider2D[] overlapCheck = Physics2D.OverlapCircleAll(finalPosition, colliderRadius * 0.8f, obstacleLayerMask);
+		if (overlapCheck.Length > 0)
+		{
+			// 벽에 끼였다면 안전한 위치로 이동 (시작 위치 방향으로 약간 후퇴)
+			Vector2 escapeDirection = (startPos - finalPosition).normalized;
+			finalPosition = finalPosition + (Vector3)(escapeDirection * colliderRadius);
+			playerController.transform.position = finalPosition;
+			
+			Debug.LogWarning("[CourageRush] 벽 끼임 감지! 안전한 위치로 이동");
+		}
+		
+		// 8. 무적 해제
 		if (invincibleDuringDash)
 		{
 			playerController.SetInvincible(false);
 		}
 		
-		// 8. 도착 지점 AOE 효과
-		ApplyAOEEffect(targetPos, rank);
+		// 9. 물리 상태 복원
+		if (rb != null)
+		{
+			rb.linearVelocity = Vector2.zero; // 대쉬 후 속도 초기화
+		}
 		
-		// 9. 재사용 상태 업데이트
+		// 10. 도착 지점 AOE 효과 (실제 도착한 위치에서 발동)
+		ApplyAOEEffect(finalPosition, rank);
+		
+		// 11. 재사용 상태 업데이트
 		if (isRechargeAvailable)
 		{
 			// 재사용 소모

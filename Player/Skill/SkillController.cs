@@ -37,10 +37,10 @@ public class SkillController : MonoBehaviour
     
     private void Start()
     {
-        EnsureSlot(ref zSlot, "Z Slot");
-        EnsureSlot(ref xSlot, "X Slot");
-        EnsureSlot(ref cSlot, "C Slot");
-        EnsureSlot(ref vSlot, "V Slot");
+        EnsureSlot(ref zSlot, "Z Slot", SkillSlotType.Z);
+        EnsureSlot(ref xSlot, "X Slot", SkillSlotType.X);
+        EnsureSlot(ref cSlot, "C Slot", SkillSlotType.C);
+        EnsureSlot(ref vSlot, "V Slot", SkillSlotType.V);
 
         // 로드아웃이 있으면 우선 적용, 없으면 기존 기본 스킬 사용
         if (loadout != null)
@@ -57,6 +57,14 @@ public class SkillController : MonoBehaviour
             if (defaultCSkill != null) cSlot.SetSkillData(defaultCSkill);
             if (defaultVSkill != null) vSlot.SetSkillData(defaultVSkill);
         }
+    }
+    
+    /// <summary>
+    /// SkillController의 모든 슬롯 가져오기 (배열 형태)
+    /// </summary>
+    public SkillSlot[] GetAllSlots()
+    {
+        return new SkillSlot[] { zSlot, xSlot, cSlot, vSlot };
     }
     
     private void OnEnable()
@@ -105,12 +113,36 @@ public class SkillController : MonoBehaviour
     }
     
     // 슬롯 보장: 없으면 생성해서 붙임
-    private void EnsureSlot(ref SkillSlot slot, string name)
+    private void EnsureSlot(ref SkillSlot slot, string name, SkillSlotType slotType)
     {
-        if (slot != null) return;
+        if (slot != null)
+        {
+            // 이미 있는 슬롯의 타입 설정
+            slot.SetSlotType(slotType);
+            return;
+        }
+        
         var go = new GameObject(name);
         go.transform.SetParent(transform, false);
         slot = go.AddComponent<SkillSlot>();
+        
+        // 생성한 슬롯의 타입 설정
+        slot.SetSlotType(slotType);
+    }
+    
+    /// <summary>
+    /// 스킬 슬롯 가져오기 (UI 접근용)
+    /// </summary>
+    public SkillSlot GetSkillSlot(SkillSlotType slotType)
+    {
+        switch (slotType)
+        {
+            case SkillSlotType.Z: return zSlot;
+            case SkillSlotType.X: return xSlot;
+            case SkillSlotType.C: return cSlot;
+            case SkillSlotType.V: return vSlot;
+            default: return null;
+        }
     }
 
     // 런타임 스킬 변경 API

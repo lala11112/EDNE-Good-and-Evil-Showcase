@@ -278,6 +278,10 @@ public class PlayerController : EntityController
 
 		maxMentalPower = playerData.maxMentalPower;
 		currentMentalPower = playerData.initialMentalPower;
+		
+		// 초기화 시 이벤트 발생
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
 	}
 
 	/// <summary>
@@ -305,8 +309,15 @@ public class PlayerController : EntityController
 		if (!isAlive) return;
 
 		// 회복량 계산
+		int previousMentalPower = currentMentalPower;
 		float regenAmount = playerData.mentalPowerRegenRate * deltaTime;
 		currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + Mathf.RoundToInt(regenAmount));
+		
+		// 실제로 회복되었을 때만 이벤트 발생
+		if (currentMentalPower != previousMentalPower)
+		{
+			PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		}
 	}
 
 	/// <summary>
@@ -344,9 +355,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnMentalPowerConsumed(int amount)
 	{
-		// 자식 클래스 또는 이벤트 시스템에서 처리:
-		// - UI 업데이트
-		// - 효과음
+		// 이벤트 발생 (UI 업데이트용)
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		PlayerStatusEvents.InvokeMentalPowerConsumed(amount);
 	}
 
 	/// <summary>
@@ -354,9 +365,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnMentalPowerRestored(int amount)
 	{
-		// 자식 클래스 또는 이벤트 시스템에서 처리:
-		// - UI 업데이트
-		// - 효과음
+		// 이벤트 발생 (UI 업데이트용)
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		PlayerStatusEvents.InvokeMentalPowerRestored(amount);
 	}
 
 	#endregion
@@ -697,11 +708,26 @@ public class PlayerController : EntityController
 	{
 		base.OnDamaged(damageAmount, damageSource);
 		
+		// 체력 변경 이벤트 발생 (플레이어 전용)
+		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
+		
 		// 카메라 쉐이크: 데미지 크기에 비례
 		if (damageAmount > 0 && hitShake != null && camShake != null)
 		{
 			hitShake.ApplyShake(camShake, damageAmount);
 		}
+	}
+	
+	/// <summary>
+	/// 플레이어 회복 처리
+	/// EntityController의 OnHealed()를 오버라이드
+	/// </summary>
+	protected override void OnHealed(int healedAmount)
+	{
+		base.OnHealed(healedAmount);
+		
+		// 체력 변경 이벤트 발생 (플레이어 전용)
+		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
 	}
 	
 	/// <summary>

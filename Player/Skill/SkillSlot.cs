@@ -3,17 +3,32 @@ using UnityEngine;
 
 public class SkillSlot : MonoBehaviour
 {
+    [Header("슬롯 타입")]
+    [Tooltip("이 슬롯의 타입 (Z, X, C, V)")]
+    [SerializeField] private SkillSlotType slotType;
+    
+    /// <summary>
+    /// 슬롯 타입 설정 (SkillController에서 자동 설정)
+    /// </summary>
+    public void SetSlotType(SkillSlotType type)
+    {
+        slotType = type;
+    }
+    
     [Header("현재 스킬")]
     [SerializeField] private PlayerSkillData currentSkillData;  // 현재 장착된 스킬
     
     [Header("상태")]
     [SerializeField] private bool isOnCooldown;
     [SerializeField] private float currentCooldown;
+    [SerializeField] private float totalCooldown; // 전체 쿨타임 (UI 퍼센트 계산용)
     
     // 현재 스킬 데이터 접근용 프로퍼티
     public PlayerSkillData CurrentSkillData => currentSkillData;
     public float CurrentCooldown => currentCooldown;
-    private bool IsOnCooldown;
+    public float TotalCooldown => totalCooldown;
+    public bool IsOnCooldown => isOnCooldown;
+    public SkillSlotType SlotType => slotType;
 
     private SkillHandlerInterface handler;        // 캐시
     private GameObject handlerGO;         // 인스턴스
@@ -42,11 +57,19 @@ public class SkillSlot : MonoBehaviour
         // 쿨타임 관리
         if (isOnCooldown && currentSkillData != null)
         {
+            float previousCooldown = currentCooldown;
             currentCooldown -= Time.deltaTime;
+            
+            // 쿨타임 업데이트 이벤트 (매 프레임)
+            SkillUIEvents.InvokeCooldownUpdated(slotType, currentCooldown, totalCooldown);
+            
             if (currentCooldown <= 0)
             {
                 isOnCooldown = false;
                 currentCooldown = 0f;
+                
+                // 쿨타임 종료 이벤트
+                SkillUIEvents.InvokeCooldownEnded(slotType);
             }
         }
     }
@@ -81,6 +104,7 @@ public class SkillSlot : MonoBehaviour
         // 스킬 변경 시 쿨타임 초기화
         isOnCooldown = false;
         currentCooldown = 0f;
+        totalCooldown = newSkillData != null ? newSkillData.cooldown : 0f;
 
         // ⭐ 새 핸들러 생성 및 Setup (스킬 변경 시에만)
         if (currentSkillData != null && currentSkillData.handlerPrefab != null)
@@ -96,6 +120,9 @@ public class SkillSlot : MonoBehaviour
             handler.Setup(currentSkillData, ownerGO);
         }
         
+        // 스킬 슬롯 변경 이벤트 발생
+        SkillUIEvents.InvokeSkillSlotChanged(slotType, currentSkillData);
+        
         Debug.Log($"{currentSkillData.skillName} 스킬이 슬롯에 장착되었습니다!");
     }
     
@@ -104,12 +131,14 @@ public class SkillSlot : MonoBehaviour
     {
         if (currentSkillData == null)
         {
+            SkillUIEvents.InvokeSkillUseFailed(slotType, "스킬 없음");
             Debug.LogWarning("장착된 스킬이 없습니다!");
             return;
         }
         
         if (handler == null)
         {
+            SkillUIEvents.InvokeSkillUseFailed(slotType, "핸들러 없음");
             Debug.LogWarning("핸들러가 없습니다.");
             return;
         }
@@ -122,10 +151,14 @@ public class SkillSlot : MonoBehaviour
         // 쿨타임 체크 (FaithDash는 재사용 모드 종료 후에만 쿨타임 적용)
         if (isOnCooldown)
         {
+            SkillUIEvents.InvokeSkillUseFailed(slotType, $"쿨타임 ({currentCooldown:F1}초)");
             Debug.Log($"{currentSkillData.skillName} 스킬이 쿨타임 중입니다! ({currentCooldown:F1}초 남음)");
             return;
         }
 
+        // 스킬 사용 이벤트
+        SkillUIEvents.InvokeSkillUsed(slotType, currentSkillData);
+        
         handler.Use(rank);
         
         // 쿨타임 시작 (FaithDash는 재사용 모드 종료 시 시작하므로 여기서는 시작 안 함)
@@ -139,6 +172,10 @@ public class SkillSlot : MonoBehaviour
     {
         isOnCooldown = true;
         currentCooldown = currentSkillData.cooldown;
+        totalCooldown = currentSkillData.cooldown;
+        
+        // 쿨타임 시작 이벤트
+        SkillUIEvents.InvokeCooldownStarted(slotType, totalCooldown);
         
         Debug.Log($"{currentSkillData.skillName} 쿨타임 시작: {currentCooldown}초");
     }
