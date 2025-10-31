@@ -164,6 +164,9 @@ public class MonsterSpawner : MonoBehaviour
             {
                 Debug.Log($"[MonsterSpawner] 연결된 RoomController 사용: {connectedRoomController.name}");
                 
+                // 몬스터에 RoomController 설정 (분열 몬스터 등록용)
+                monsterController.SetRoomController(connectedRoomController);
+                
                 // 몬스터 등록
                 connectedRoomController.RegisterMonster(monsterController);
                 

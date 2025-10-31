@@ -40,9 +40,6 @@ public class RoomController : MonoBehaviour
 
     // 웨이브 관련 변수
     private bool isWaveInProgress = false;
-    private float nextWaveTimer = 0f;
-    private int remainingMonstersForNextWave = 0;
-    private Coroutine waveCoroutine;
     
     // 디버그 관련 변수
     private float debugTimer = 0f;
@@ -233,6 +230,12 @@ public class RoomController : MonoBehaviour
             }
         }
 
+        // 모든 스포너의 스폰이 완료될 때까지 대기 (spawnWarningTime + 여유 시간)
+        Debug.Log($"[RoomController] 모든 몬스터 스폰 예약 완료, 실제 스폰 대기 중... ({roomData.spawnWarningTime + 0.5f}초)");
+        yield return new WaitForSeconds(roomData.spawnWarningTime + 0.5f);
+        
+        Debug.Log($"[RoomController] 웨이브 {waveData.waveNumber} 스폰 완료! 현재 몬스터 수: {currentMonsters.Count}마리");
+
         // 웨이브 완료 대기
         StartCoroutine(WaitForWaveCompletion(waveData));
     }
@@ -272,46 +275,47 @@ public class RoomController : MonoBehaviour
     }
 
     /// <summary>
-    /// 웨이브 완료 대기
+    /// 웨이브 완료 대기 (모든 몬스터 처치 대기)
     /// </summary>
     private IEnumerator WaitForWaveCompletion(WaveData waveData)
     {
-        // 몬스터 처치 대기
-        while (currentMonsters.Count > roomData.remainingMonstersForNextWave)
+        Debug.Log($"[RoomController] 웨이브 {waveData.waveNumber} 몬스터 처치 대기 시작 (현재 {currentMonsters.Count}마리)");
+        
+        // 안전장치: 몬스터가 하나도 없으면 1초 대기 후 다시 확인
+        if (currentMonsters.Count == 0)
         {
-            yield return null;
+            Debug.LogWarning($"[RoomController] 웨이브 시작 시 몬스터가 0마리! 1초 대기 후 재확인...");
+            yield return new WaitForSeconds(1f);
         }
-
-        // 다음 웨이브 카운트 시작
-        StartCoroutine(NextWaveCountdown(waveData));
-    }
-
-    /// <summary>
-    /// 다음 웨이브 카운트다운
-    /// </summary>
-    private IEnumerator NextWaveCountdown(WaveData currentWaveData)
-    {
-        nextWaveTimer = roomData.nextWaveDelay;
-        remainingMonstersForNextWave = roomData.remainingMonstersForNextWave;
-
-        Debug.Log($"[RoomController] 다음 웨이브까지 {nextWaveTimer}초 대기 시작");
-
-        while (nextWaveTimer > 0f)
+        
+        // 여전히 0마리면 스폰 실패로 간주
+        if (currentMonsters.Count == 0)
         {
-            nextWaveTimer -= Time.deltaTime;
-
-            // 몬스터 처치 시 카운트 감소
-            if (currentMonsters.Count < remainingMonstersForNextWave)
+            Debug.LogError($"[RoomController] 웨이브 {waveData.waveNumber}에 몬스터가 스폰되지 않았습니다! 웨이브 강제 완료.");
+            CompleteWave(waveData);
+            yield break;
+        }
+        
+        // 모든 몬스터 처치 대기
+        while (currentMonsters.Count > 0)
+        {
+            // null 체크 및 정리
+            for (int i = currentMonsters.Count - 1; i >= 0; i--)
             {
-                nextWaveTimer -= roomData.killCountReduction;
-                remainingMonstersForNextWave = currentMonsters.Count;
+                if (currentMonsters[i] == null)
+                {
+                    Debug.LogWarning($"[RoomController] null 몬스터 발견, 목록에서 제거");
+                    currentMonsters.RemoveAt(i);
+                }
             }
-
+            
             yield return null;
         }
 
+        Debug.Log($"[RoomController] 웨이브 {waveData.waveNumber}의 모든 몬스터 처치 완료!");
+        
         // 웨이브 완료
-        CompleteWave(currentWaveData);
+        CompleteWave(waveData);
     }
 
     /// <summary>

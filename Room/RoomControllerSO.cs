@@ -35,19 +35,6 @@ public class RoomControllerSO : ScriptableObject
     [Tooltip("웨이브 데이터 리스트")]
     public List<WaveData> waveDataList = new List<WaveData>();
 
-    [Header("웨이브 전환 설정")]
-    [Tooltip("몬스터가 몇 마리 남았을 때 다음 웨이브 카운트 시작")]
-    [Range(1, 10)]
-    public int remainingMonstersForNextWave = 2;
-    
-    [Tooltip("다음 웨이브까지 대기 시간")]
-    [Range(1f, 10f)]
-    public float nextWaveDelay = 3f;
-    
-    [Tooltip("몬스터 처치 시 카운트 감소량")]
-    [Range(0.1f, 2f)]
-    public float killCountReduction = 1f;
-
     [Header("방 클리어 설정")]
     [Tooltip("방 클리어 시 보상")]
     public List<RewardData> clearRewards = new List<RewardData>();
