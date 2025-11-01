@@ -26,14 +26,14 @@ namespace EDNE.UI
 
         [Header("Option Panel")]
         [SerializeField] private GameObject optionPanel;
-        [SerializeField] private Slider volumeSlider;
-        [SerializeField] private Button optionCloseButton;
+        [SerializeField] private OptionPanelController optionPanelController;
 
         private bool isPaused = false;
 
         private void Start()
         {
             InitializeButtons();
+            InitializeOptionPanel();
             
             // 초기 상태 설정
             if (pauseMenuPanel != null) 
@@ -44,6 +44,15 @@ namespace EDNE.UI
 
             // 게임 시작 시 시간 정상화
             Time.timeScale = 1f;
+        }
+
+        private void InitializeOptionPanel()
+        {
+            // OptionPanelController의 닫기 이벤트 구독
+            if (optionPanelController != null)
+            {
+                optionPanelController.OnPanelClosed.AddListener(CloseOptionPanel);
+            }
         }
 
         private void Update()
@@ -74,15 +83,6 @@ namespace EDNE.UI
             
             if (mainMenuButton != null)
                 mainMenuButton.onClick.AddListener(OnMainMenuClicked);
-
-            if (optionCloseButton != null)
-                optionCloseButton.onClick.AddListener(CloseOptionPanel);
-
-            if (volumeSlider != null)
-            {
-                volumeSlider.value = AudioListener.volume;
-                volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
-            }
         }
 
         #endregion
@@ -186,15 +186,7 @@ namespace EDNE.UI
         }
 
         #endregion
-
-        #region Option Events
-
-        private void OnVolumeChanged(float value)
-        {
-            UIManager.Instance.SetMasterVolume(value);
-        }
-
-        #endregion
     }
 }
+
 
