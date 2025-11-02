@@ -91,6 +91,13 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("플레이어 스프라이트 렌더러 (잔상 복사용)")]
 	[SerializeField] private SpriteRenderer playerSpriteRenderer;
 	
+	[Header("사운드 이펙트")]
+	[Tooltip("스킬 시작 효과음")]
+	[SerializeField] private AudioClip skillStartSound;
+	
+	[Tooltip("잔상 생성 효과음")]
+	[SerializeField] private AudioClip afterimageSpawnSound;
+	
 	#endregion
 	
 	#region 코루틴 참조
@@ -186,6 +193,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void StartSkill(SkillRank rank)
 	{
+		// 스킬 시작 효과음 재생
+		PlaySkillStartSound();
+		
 		isActive = true;
 		
 		// 지속 시간 설정
@@ -363,6 +373,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			}
 		}
 		
+		// 잔상 생성 효과음 재생 (볼륨을 낮게)
+		PlayAfterimageSpawnSound();
+		
 		// 잔상 생성
 		GameObject afterimageObj = Instantiate(afterimagePrefab, position, Quaternion.identity);
 		AfterimageController afterimage = afterimageObj.GetComponent<AfterimageController>();
@@ -408,6 +421,48 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			}
 		}
 		activeAfterimages.Clear();
+	}
+	
+	#endregion
+	
+	#region 사운드 재생
+	
+	/// <summary>
+	/// 스킬 시작 효과음 재생
+	/// </summary>
+	private void PlaySkillStartSound()
+	{
+		if (skillStartSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(skillStartSound);
+			Debug.Log("[RainOfFaithHandler] 스킬 시작 효과음 재생");
+		}
+	}
+	
+	/// <summary>
+	/// 잔상 생성 효과음 재생
+	/// </summary>
+	private void PlayAfterimageSpawnSound()
+	{
+		if (afterimageSpawnSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			// 잔상 생성은 빈번하므로 볼륨을 낮춤
+			audioSource.PlayOneShot(afterimageSpawnSound, 0.3f);
+		}
 	}
 	
 	#endregion

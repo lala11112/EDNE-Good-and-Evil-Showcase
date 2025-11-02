@@ -113,6 +113,13 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("스트라이크 존 파티클 개수")]
 	[SerializeField] private int strikeZoneParticleCount = 15;
 	
+	[Header("사운드 이펙트")]
+	[Tooltip("검무 휘두르기 효과음")]
+	[SerializeField] private AudioClip bladeDanceSound;
+	
+	[Tooltip("스트라이크 존 적중 효과음")]
+	[SerializeField] private AudioClip strikeZoneHitSound;
+	
 	#endregion
 	
 	#region SkillHandlerInterface 구현
@@ -199,6 +206,9 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ExecuteBladeDance(SkillRank rank)
 	{
+		// 0. 검무 휘두르기 효과음 재생
+		PlayBladeDanceSound();
+		
 		// 1. 범위 계산 (랭크별)
 		float currentRange = CalculateRange(rank);
 		float currentStrikeZoneThickness = strikeZoneThickness;
@@ -409,6 +419,9 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ApplyStrikeZoneDamage(EntityController enemy, float baseDamage)
 	{
+		// 스트라이크 존 적중 효과음 재생 (첫 적중 시만)
+		PlayStrikeZoneHitSound();
+		
 		// 강화 데미지
 		float enhancedDamage = baseDamage * strikeZoneDamageMultiplier;
 		int damage = Mathf.RoundToInt(enhancedDamage);
@@ -639,6 +652,48 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 			
 			GameObject particle = Instantiate(edgeParticlePrefab, linePos, Quaternion.identity);
 			Destroy(particle, effectDuration);
+		}
+	}
+	
+	#endregion
+	
+	#region 사운드 재생
+	
+	/// <summary>
+	/// 검무 휘두르기 효과음 재생
+	/// </summary>
+	private void PlayBladeDanceSound()
+	{
+		if (bladeDanceSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(bladeDanceSound);
+			Debug.Log("[IronBladeDanceHandler] 검무 휘두르기 효과음 재생");
+		}
+	}
+	
+	/// <summary>
+	/// 스트라이크 존 적중 효과음 재생
+	/// </summary>
+	private void PlayStrikeZoneHitSound()
+	{
+		if (strikeZoneHitSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(strikeZoneHitSound);
+			Debug.Log("[IronBladeDanceHandler] 스트라이크 존 적중 효과음 재생");
 		}
 	}
 	
