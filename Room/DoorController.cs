@@ -35,6 +35,9 @@ public class DoorController : MonoBehaviour
     
     [Tooltip("문 콜라이더")]
     [SerializeField] private Collider2D doorCollider;
+    
+    [Tooltip("오디오 소스")]
+    [SerializeField] private AudioSource audioSource;
 
     [Header("이펙트")]
     [Tooltip("문 열기 이펙트")]
@@ -79,6 +82,20 @@ public class DoorController : MonoBehaviour
         if (doorCollider == null)
         {
             doorCollider = GetComponent<Collider2D>();
+        }
+        
+        // AudioSource 컴포넌트 자동 할당
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            // AudioSource가 없으면 추가
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                // 기본 설정
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0f; // 2D 사운드
+            }
         }
 
         // 원래 위치 저장
@@ -199,11 +216,19 @@ public class DoorController : MonoBehaviour
     /// </summary>
     private void PlayDoorSound(bool opening)
     {
+        // 재생할 사운드 선택 (열기 또는 닫기)
         AudioClip soundToPlay = opening ? openSound : closeSound;
-        if (soundToPlay != null)
+        
+        // 사운드가 설정되어 있고 오디오 소스가 있으면 재생
+        if (soundToPlay != null && audioSource != null)
         {
-            // TODO: 오디오 소스로 사운드 재생
+            // PlayOneShot을 사용하여 사운드 재생 (중복 재생 가능)
+            audioSource.PlayOneShot(soundToPlay);
             Debug.Log($"[DoorController] {doorName} {(opening ? "열기" : "닫기")} 사운드 재생");
+        }
+        else if (soundToPlay == null)
+        {
+            Debug.LogWarning($"[DoorController] {doorName}의 {(opening ? "열기" : "닫기")} 사운드가 설정되지 않았습니다.");
         }
     }
 

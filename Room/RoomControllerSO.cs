@@ -24,7 +24,10 @@ public class RoomControllerSO : ScriptableObject
     [Tooltip("몬스터 스폰 이펙트")]
     public GameObject spawnEffect;
     
-    [Tooltip("몬스터 스폰 사운드")]
+    [Tooltip("몬스터 스폰 예고 사운드 (이펙트와 함께 재생)")]
+    public AudioClip spawnWarningSound;
+    
+    [Tooltip("몬스터 스폰 사운드 (실제 스폰 시 재생)")]
     public AudioClip spawnSound;
     
     [Tooltip("몬스터 스폰 시 랜덤 위치 오프셋")]
