@@ -22,6 +22,10 @@ public class RoomController : MonoBehaviour
     [Tooltip("방의 몬스터 스포너들")]
     [SerializeField] private List<MonsterSpawner> monsterSpawners = new List<MonsterSpawner>();
 
+    [Header("트랩")]
+    [Tooltip("방의 트랩들")]
+    [SerializeField] private List<TrapBase> connectedTraps = new List<TrapBase>();
+
     [Header("현재 상태")]
     [Tooltip("현재 웨이브 번호")]
     [SerializeField] private int currentWave = 0;
@@ -102,6 +106,12 @@ public class RoomController : MonoBehaviour
             FindMonsterSpawners();
         }
 
+        // 트랩 자동 찾기
+        if (connectedTraps.Count == 0)
+        {
+            FindTraps();
+        }
+
         // 초기 설정
         isRoomActive = false;
         isRoomCleared = false;
@@ -131,6 +141,27 @@ public class RoomController : MonoBehaviour
         Debug.Log($"[RoomController] {monsterSpawners.Count}개의 몬스터 스포너를 찾았습니다.");
     }
 
+    /// <summary>
+    /// 트랩 자동 찾기
+    /// </summary>
+    private void FindTraps()
+    {
+        TrapBase[] traps = GetComponentsInChildren<TrapBase>();
+        connectedTraps.AddRange(traps);
+        
+        // 각 트랩에 RoomController 설정
+        foreach (var trap in traps)
+        {
+            if (trap != null)
+            {
+                trap.SetRoomController(this);
+                Debug.Log($"[RoomController] 트랩 {trap.name}에 RoomController 설정 완료");
+            }
+        }
+        
+        Debug.Log($"[RoomController] {connectedTraps.Count}개의 트랩을 찾았습니다.");
+    }
+
     private void OnTriggerEnter2D(Collider2D other)
     {
         // 방에 한번이라도 들어가면 EnterRoom은 다시 실행되지않게
@@ -155,6 +186,9 @@ public class RoomController : MonoBehaviour
 
         // 문 닫기
         CloseDoors();
+
+        // 트랩 시작
+        StartTraps();
 
         // 첫 번째 웨이브 시작
         StartCoroutine(StartFirstWave());
@@ -380,6 +414,9 @@ public class RoomController : MonoBehaviour
         isRoomCleared = true;
         isRoomActive = false;
 
+        // 트랩 정지
+        StopTraps();
+
         // 문 열기
         OpenDoors();
 
@@ -574,6 +611,79 @@ public class RoomController : MonoBehaviour
         else
         {
             Debug.Log($"[RoomController] 등록된 몬스터가 없습니다.");
+        }
+    }
+
+    /// <summary>
+    /// 트랩 시작
+    /// 방 진입 시 모든 트랩을 시작합니다.
+    /// </summary>
+    private void StartTraps()
+    {
+        foreach (var trap in connectedTraps)
+        {
+            if (trap != null && trap.IsActive)
+            {
+                trap.StartTrap();
+            }
+        }
+        
+        Debug.Log($"[RoomController] {connectedTraps.Count}개의 트랩 시작");
+    }
+
+    /// <summary>
+    /// 트랩 정지
+    /// 방 클리어 시 모든 트랩을 정지합니다.
+    /// </summary>
+    private void StopTraps()
+    {
+        foreach (var trap in connectedTraps)
+        {
+            if (trap != null && trap.IsRunning)
+            {
+                trap.StopTrap();
+            }
+        }
+        
+        Debug.Log($"[RoomController] 모든 트랩 정지");
+    }
+
+    /// <summary>
+    /// 트랩 등록 (수동 연결용)
+    /// </summary>
+    /// <param name="trap">등록할 트랩</param>
+    public void RegisterTrap(TrapBase trap)
+    {
+        if (trap == null)
+        {
+            Debug.LogError($"[RoomController] null 트랩을 등록하려고 시도했습니다.");
+            return;
+        }
+
+        if (!connectedTraps.Contains(trap))
+        {
+            connectedTraps.Add(trap);
+            trap.SetRoomController(this);
+            Debug.Log($"[RoomController] 트랩 등록: {trap.name} (총 {connectedTraps.Count}개)");
+        }
+        else
+        {
+            Debug.LogWarning($"[RoomController] 트랩 {trap.name}이 이미 등록되어 있습니다.");
+        }
+    }
+
+    /// <summary>
+    /// 트랩 제거
+    /// </summary>
+    /// <param name="trap">제거할 트랩</param>
+    public void UnregisterTrap(TrapBase trap)
+    {
+        if (trap == null) return;
+
+        if (connectedTraps.Contains(trap))
+        {
+            connectedTraps.Remove(trap);
+            Debug.Log($"[RoomController] 트랩 제거: {trap.name} (남은 {connectedTraps.Count}개)");
         }
     }
 
