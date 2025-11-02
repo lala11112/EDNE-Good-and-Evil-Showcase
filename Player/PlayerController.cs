@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Com.LuisPedroFonseca.ProCamera2D;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
@@ -27,6 +28,12 @@ public class PlayerController : EntityController
 
 	[Header("애니메이션")]
 	[SerializeField] private Animator animator;
+
+	[Header("카메라 쉐이크 (피격)")]
+	[Tooltip("피격 데미지에 따라 쉐이크 강도를 계산하는 SO")]
+	[SerializeField] private PlayerHitShakeSO hitShake;
+	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착)")]
+	[SerializeField] private ProCamera2DShake camShake;
 
 	[Header("입력 시스템")]
 	[Tooltip("Input Action Asset (Generate C# Class를 사용하지 않는 경우)")]
@@ -76,6 +83,22 @@ public class PlayerController : EntityController
 
 	[Tooltip("현재 이동 방향 (8방향)")]
 	[SerializeField] private MoveDirection currentMoveDirection = MoveDirection.None;
+
+	#endregion
+
+	#region 이벤트
+
+	/// <summary>
+	/// 플레이어 사망 이벤트
+	/// 게임 오버 UI 등에서 구독하여 사용합니다.
+	/// </summary>
+	public static event System.Action OnPlayerDied;
+	
+	/// <summary>
+	/// 플레이어 부활 이벤트
+	/// 게임 오버 UI에서 "계속하기" 버튼 클릭 시 사용합니다.
+	/// </summary>
+	public static event System.Action OnPlayerRevived;
 
 	#endregion
 
@@ -162,6 +185,12 @@ public class PlayerController : EntityController
 		if (animator == null)
 		{
 			animator = GetComponentInChildren<Animator>();
+		}
+
+		// 카메라 쉐이크 자동 할당 (없으면 찾기)
+		if (camShake == null)
+		{
+			camShake = FindObjectOfType<ProCamera2DShake>();
 		}
 	}
 
@@ -265,6 +294,10 @@ public class PlayerController : EntityController
 
 		maxMentalPower = playerData.maxMentalPower;
 		currentMentalPower = playerData.initialMentalPower;
+		
+		// 초기화 시 이벤트 발생
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
 	}
 
 	/// <summary>
@@ -292,8 +325,15 @@ public class PlayerController : EntityController
 		if (!isAlive) return;
 
 		// 회복량 계산
+		int previousMentalPower = currentMentalPower;
 		float regenAmount = playerData.mentalPowerRegenRate * deltaTime;
 		currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + Mathf.RoundToInt(regenAmount));
+		
+		// 실제로 회복되었을 때만 이벤트 발생
+		if (currentMentalPower != previousMentalPower)
+		{
+			PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		}
 	}
 
 	/// <summary>
@@ -331,9 +371,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnMentalPowerConsumed(int amount)
 	{
-		// 자식 클래스 또는 이벤트 시스템에서 처리:
-		// - UI 업데이트
-		// - 효과음
+		// 이벤트 발생 (UI 업데이트용)
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		PlayerStatusEvents.InvokeMentalPowerConsumed(amount);
 	}
 
 	/// <summary>
@@ -341,9 +381,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnMentalPowerRestored(int amount)
 	{
-		// 자식 클래스 또는 이벤트 시스템에서 처리:
-		// - UI 업데이트
-		// - 효과음
+		// 이벤트 발생 (UI 업데이트용)
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		PlayerStatusEvents.InvokeMentalPowerRestored(amount);
 	}
 
 	#endregion
@@ -684,7 +724,26 @@ public class PlayerController : EntityController
 	{
 		base.OnDamaged(damageAmount, damageSource);
 		
-		// 피격 이펙트, 사운드 등 추가 가능
+		// 체력 변경 이벤트 발생 (플레이어 전용)
+		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
+		
+		// 카메라 쉐이크: 데미지 크기에 비례
+		if (damageAmount > 0 && hitShake != null && camShake != null)
+		{
+			hitShake.ApplyShake(camShake, damageAmount);
+		}
+	}
+	
+	/// <summary>
+	/// 플레이어 회복 처리
+	/// EntityController의 OnHealed()를 오버라이드
+	/// </summary>
+	protected override void OnHealed(int healedAmount)
+	{
+		base.OnHealed(healedAmount);
+		
+		// 체력 변경 이벤트 발생 (플레이어 전용)
+		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
 	}
 	
 	/// <summary>
@@ -706,17 +765,67 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnPlayerDeath()
 	{
-		// 나중에 구현:
-		// - 사망 애니메이션
-		// - 게임오버 UI
-		// - 리스폰 또는 씬 전환
-		// - 데이터 저장
+		Debug.Log("[PlayerController] 플레이어 사망 이벤트 발생");
 		
 		// 입력 비활성화
 		if (inputActions != null)
 		{
 			inputActions.Disable();
 		}
+		
+		// 이동 정지
+		if (rb != null)
+		{
+			rb.linearVelocity = Vector2.zero;
+		}
+		
+		// 사망 애니메이션 재생
+		if (animator != null)
+		{
+			animator.SetTrigger("Death");
+		}
+		
+		// 플레이어 사망 이벤트 발생 (GameOverUI가 구독 중)
+		OnPlayerDied?.Invoke();
+	}
+	
+	/// <summary>
+	/// 플레이어 부활
+	/// 게임 오버 UI의 "계속하기" 버튼에서 호출합니다.
+	/// </summary>
+	public void Revive()
+	{
+		Debug.Log("[PlayerController] 플레이어 부활");
+		
+		// 체력 완전 회복 (최대로 설정)
+		currentHealth = MaxHealth;
+		
+		// 정신력 완전 회복 (최대로 설정)
+		currentMentalPower = maxMentalPower;
+		
+		// 생존 상태로 변경
+		isAlive = true;
+		
+		// 입력 활성화
+		if (inputActions != null)
+		{
+			inputActions.Enable();
+		}
+		
+		// 애니메이터 리셋
+		if (animator != null)
+		{
+			animator.SetTrigger("Revive");
+		}
+		
+		// 부활 이벤트 발생
+		OnPlayerRevived?.Invoke();
+		
+		// UI 업데이트 (최대 체력/정신력으로 업데이트)
+		PlayerStatusEvents.InvokeHealthChanged(currentHealth, MaxHealth);
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		
+		Debug.Log($"[PlayerController] 부활 완료 - 체력: {currentHealth}/{MaxHealth}, 정신력: {currentMentalPower}/{maxMentalPower}");
 	}
 
 	#endregion

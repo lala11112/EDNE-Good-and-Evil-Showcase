@@ -40,13 +40,10 @@ public class RoomController : MonoBehaviour
 
     // 웨이브 관련 변수
     private bool isWaveInProgress = false;
-    private float nextWaveTimer = 0f;
-    private int remainingMonstersForNextWave = 0;
-    private Coroutine waveCoroutine;
     
     // 디버그 관련 변수
     private float debugTimer = 0f;
-    private const float DEBUG_INTERVAL = 3f; // 10초마다
+    private const float DEBUG_INTERVAL = 10f; // 10초마다
 
     // 이벤트
     public System.Action<RoomController> OnRoomEntered;
@@ -89,7 +86,7 @@ public class RoomController : MonoBehaviour
     {
         if (roomData == null)
         {
-            Debug.LogError($"[RoomController] {gameObject.name}에 RoomControllerSO가 설정되지 않았습니다!");
+            Debug.LogWarning($"[RoomController] {gameObject.name}에 RoomControllerSO가 설정되지 않았습니다!");
             return;
         }
 
@@ -217,24 +214,30 @@ public class RoomController : MonoBehaviour
     {
         foreach (var monsterData in waveData.monsterSpawnData)
         {
-            // 스포너 선택
-            MonsterSpawner selectedSpawner = SelectSpawner(monsterData);
-            if (selectedSpawner == null)
-            {
-                Debug.LogWarning($"[RoomController] 사용 가능한 스포너가 없습니다.");
-                continue;
-            }
-
-            // 몬스터 스폰 해당 기능은 몬스터 스폰카운트가 많아도 적용되지않을텐데 이부분 나중에 수정할예정입니다.
+            // 몬스터 수만큼 스폰 (각 스폰마다 스포너를 새로 선택)
             for (int i = 0; i < monsterData.spawnCount; i++)
             {
+                // 스포너 선택 (매번 새로운 스포너 선택)
+                MonsterSpawner selectedSpawner = SelectSpawner(monsterData);
+                if (selectedSpawner == null)
+                {
+                    Debug.LogWarning($"[RoomController] 사용 가능한 스포너가 없습니다.");
+                    continue;
+                }
+
+                // 몬스터 스폰
                 selectedSpawner.StartSpawning(monsterData, roomData.spawnWarningTime);
                 yield return new WaitForSeconds(waveData.spawnInterval);
             }
         }
 
+        // 모든 스포너의 스폰이 완료될 때까지 대기 (spawnWarningTime + 여유 시간)
+        Debug.Log($"[RoomController] 모든 몬스터 스폰 예약 완료, 실제 스폰 대기 중... ({roomData.spawnWarningTime + 0.5f}초)");
+        yield return new WaitForSeconds(roomData.spawnWarningTime + 0.5f);
+        
+        Debug.Log($"[RoomController] 웨이브 {waveData.waveNumber} 스폰 완료! 현재 몬스터 수: {currentMonsters.Count}마리");
+
         // 웨이브 완료 대기
-        yield return new WaitForSeconds(waveData.spawnInterval+1);
         StartCoroutine(WaitForWaveCompletion(waveData));
     }
 
@@ -253,11 +256,26 @@ public class RoomController : MonoBehaviour
         }
         else
         {
-            // 활성화된 스포너 중 랜덤 선택
-            List<MonsterSpawner> activeSpawners = new List<MonsterSpawner>();
+            // 우선순위 1: 스폰 중이 아닌 활성 스포너 선택
+            List<MonsterSpawner> availableSpawners = new List<MonsterSpawner>();
             foreach (var spawner in monsterSpawners)
             {
                 if (spawner.isActive && !spawner.IsSpawning())
+                {
+                    availableSpawners.Add(spawner);
+                }
+            }
+
+            if (availableSpawners.Count > 0)
+            {
+                return availableSpawners[Random.Range(0, availableSpawners.Count)];
+            }
+            
+            // 우선순위 2: 모든 스포너가 사용 중이면 활성 스포너 중 아무거나 선택 (Fallback)
+            List<MonsterSpawner> activeSpawners = new List<MonsterSpawner>();
+            foreach (var spawner in monsterSpawners)
+            {
+                if (spawner.isActive)
                 {
                     activeSpawners.Add(spawner);
                 }
@@ -265,6 +283,7 @@ public class RoomController : MonoBehaviour
 
             if (activeSpawners.Count > 0)
             {
+                Debug.LogWarning($"[RoomController] 사용 가능한 스포너가 없어 활성 스포너 중 임의로 선택합니다.");
                 return activeSpawners[Random.Range(0, activeSpawners.Count)];
             }
         }
@@ -273,50 +292,47 @@ public class RoomController : MonoBehaviour
     }
 
     /// <summary>
-    /// 웨이브 완료 대기
+    /// 웨이브 완료 대기 (모든 몬스터 처치 대기)
     /// </summary>
     private IEnumerator WaitForWaveCompletion(WaveData waveData)
     {
-        // 몬스터 처치 대기 - 몬스터가 지정된 수 이하로 남았을 때 다음 웨이브 시작
-        Debug.Log($"[RoomController] 웨이브 완료 대기 중... 현재 몬스터: {currentMonsters.Count}, 다음 웨이브 시작 조건: {roomData.remainingMonstersForNextWave}마리 이하");
+        Debug.Log($"[RoomController] 웨이브 {waveData.waveNumber} 몬스터 처치 대기 시작 (현재 {currentMonsters.Count}마리)");
         
-        while (currentMonsters.Count > roomData.remainingMonstersForNextWave)
+        // 안전장치: 몬스터가 하나도 없으면 1초 대기 후 다시 확인
+        if (currentMonsters.Count == 0)
         {
-            yield return null;
+            Debug.LogWarning($"[RoomController] 웨이브 시작 시 몬스터가 0마리! 1초 대기 후 재확인...");
+            yield return new WaitForSeconds(1f);
         }
-
-        Debug.Log($"[RoomController] 웨이브 완료 조건 달성! 현재 몬스터: {currentMonsters.Count}마리");
         
-        // 다음 웨이브 카운트 시작
-        StartCoroutine(NextWaveCountdown(waveData));
-    }
-
-    /// <summary>
-    /// 다음 웨이브 카운트다운
-    /// </summary>
-    private IEnumerator NextWaveCountdown(WaveData currentWaveData)
-    {
-        nextWaveTimer = roomData.nextWaveDelay;
-        remainingMonstersForNextWave = roomData.remainingMonstersForNextWave;
-
-        Debug.Log($"[RoomController] 다음 웨이브까지 {nextWaveTimer}초 대기 시작");
-
-        while (nextWaveTimer > 0f)
+        // 여전히 0마리면 스폰 실패로 간주
+        if (currentMonsters.Count == 0)
         {
-            nextWaveTimer -= Time.deltaTime;
-
-            // 몬스터 처치 시 카운트 감소
-            if (currentMonsters.Count < remainingMonstersForNextWave)
+            Debug.LogError($"[RoomController] 웨이브 {waveData.waveNumber}에 몬스터가 스폰되지 않았습니다! 웨이브 강제 완료.");
+            CompleteWave(waveData);
+            yield break;
+        }
+        
+        // 모든 몬스터 처치 대기
+        while (currentMonsters.Count > 0)
+        {
+            // null 체크 및 정리
+            for (int i = currentMonsters.Count - 1; i >= 0; i--)
             {
-                nextWaveTimer -= roomData.killCountReduction;
-                remainingMonstersForNextWave = currentMonsters.Count;
+                if (currentMonsters[i] == null)
+                {
+                    Debug.LogWarning($"[RoomController] null 몬스터 발견, 목록에서 제거");
+                    currentMonsters.RemoveAt(i);
+                }
             }
-
+            
             yield return null;
         }
 
+        Debug.Log($"[RoomController] 웨이브 {waveData.waveNumber}의 모든 몬스터 처치 완료!");
+        
         // 웨이브 완료
-        CompleteWave(currentWaveData);
+        CompleteWave(waveData);
     }
 
     /// <summary>
@@ -559,5 +575,14 @@ public class RoomController : MonoBehaviour
         {
             Debug.Log($"[RoomController] 등록된 몬스터가 없습니다.");
         }
+    }
+
+    /// <summary>
+    /// 방 데이터(SO) 가져오기
+    /// MonsterSpawner에서 사운드 및 이펙트 재생 시 사용
+    /// </summary>
+    public RoomControllerSO GetRoomData()
+    {
+        return roomData;
     }
 }

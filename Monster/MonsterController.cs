@@ -26,6 +26,7 @@ public partial class MonsterController : EntityController
     private NavMeshAgent navAgent;  // NavMeshPlus 2D 경로 찾기
     private Animator animator;      // 애니메이션 컨트롤러
     private SpriteRenderer spriteRenderer;  // 스프라이트 렌더러 (좌우 반전용)
+    private RoomController roomController;  // 이 몬스터가 속한 방 컨트롤러
     #endregion
     
     #region Runtime Variables - 런타임 상태
@@ -68,6 +69,11 @@ public partial class MonsterController : EntityController
     /// 이동이 잠겨있는지 여부 (스킬 사용 중 등)
     /// </summary>
     public bool IsMovementLocked => movementLockTimer > 0f;
+    
+    /// <summary>
+    /// 이 몬스터가 속한 RoomController
+    /// </summary>
+    public RoomController RoomController => roomController;
     #endregion
     
     #region Unity Lifecycle - 생명주기
@@ -288,6 +294,27 @@ public partial class MonsterController : EntityController
 
     // 이벤트
     public System.Action<MonsterController> OnMonsterDied;
+    
+    #endregion
+    
+    #region Room Controller - 방 관리
+    
+    /// <summary>
+    /// RoomController 설정 (MonsterSpawner에서 호출)
+    /// </summary>
+    public void SetRoomController(RoomController controller)
+    {
+        roomController = controller;
+        Debug.Log($"[MonsterController] {gameObject.name}에 RoomController 설정: {controller?.name ?? "null"}");
+    }
+    
+    /// <summary>
+    /// RoomController 가져오기 (분열 몬스터 등록용)
+    /// </summary>
+    public RoomController GetRoomController()
+    {
+        return roomController;
+    }
     
     #endregion
 }

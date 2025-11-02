@@ -40,6 +40,7 @@ public class EnemyDeathEventSystem : MonoBehaviour
     private bool isDead = false;
     private float lastHealthCheck = 0f;
     private EntityController entityController;
+    private MonsterController monsterController;
     private Vector3 deathPosition; // 죽은 위치 저장
     
     #endregion
@@ -70,6 +71,9 @@ public class EnemyDeathEventSystem : MonoBehaviour
             enabled = false;
             return;
         }
+        
+        // MonsterController 컴포넌트 찾기 (분열 몬스터 등록용)
+        monsterController = GetComponent<MonsterController>();
     }
     
     private void Start()
@@ -225,11 +229,48 @@ public class EnemyDeathEventSystem : MonoBehaviour
                 deathScript.OnEnemyDeath(gameObject);
             }
             
+            // 분열 몬스터 처리: 생성된 몬스터를 RoomController에 자동 등록
+            RegisterSpawnedMonsters(instance);
+            
             Debug.Log($"[EnemyDeathEventSystem] {prefab.name} 프리팹이 {position} 위치에서 실행되었습니다.");
         }
         catch (System.Exception e)
         {
             Debug.LogError($"[EnemyDeathEventSystem] {prefab.name} 프리팹 실행 중 오류 발생: {e.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// 생성된 몬스터들을 RoomController에 등록
+    /// (분열 몬스터 등)
+    /// </summary>
+    private void RegisterSpawnedMonsters(GameObject spawnedObject)
+    {
+        // 부모 몬스터의 RoomController 가져오기
+        if (monsterController == null) return;
+        
+        RoomController roomController = monsterController.GetRoomController();
+        if (roomController == null)
+        {
+            Debug.LogWarning($"[EnemyDeathEventSystem] {gameObject.name}의 RoomController를 찾을 수 없습니다.");
+            return;
+        }
+        
+        // 생성된 오브젝트와 자식들에서 MonsterController 찾기
+        MonsterController[] spawnedMonsters = spawnedObject.GetComponentsInChildren<MonsterController>();
+        
+        foreach (var spawnedMonster in spawnedMonsters)
+        {
+            if (spawnedMonster != null)
+            {
+                // RoomController 설정
+                spawnedMonster.SetRoomController(roomController);
+                
+                // RoomController에 등록
+                roomController.RegisterMonster(spawnedMonster);
+                
+                Debug.Log($"[EnemyDeathEventSystem] 분열 몬스터 {spawnedMonster.name}를 RoomController에 등록했습니다.");
+            }
         }
     }
     

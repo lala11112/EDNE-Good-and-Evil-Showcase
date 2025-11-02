@@ -79,6 +79,9 @@ public class EntityController : MonoBehaviour
 
 	#region 프로퍼티 (읽기 전용)
 
+	public event System.Action<int,int> OnHealthChanged;
+    public event System.Action<EntityController> OnDied;
+
 	/// <summary>생존 여부</summary>
 	public bool IsAlive => isAlive;
 
@@ -235,6 +238,9 @@ public class EntityController : MonoBehaviour
 		// 체력 감소
 		currentHealth = Mathf.Max(0, currentHealth - damageAmount);
 
+		// 체력 변경 이벤트 발생
+		OnHealthChanged?.Invoke(currentHealth, MaxHealth);
+
 		// 피격 처리 (자식 클래스에서 오버라이드 가능)
 		OnDamaged(damageAmount, damageSource);
 
@@ -276,6 +282,9 @@ public class EntityController : MonoBehaviour
 
 		// 실제 회복된 양 계산
 		int actualHealed = currentHealth - previousHealth;
+
+		// 체력 변경 이벤트 발생
+		OnHealthChanged?.Invoke(currentHealth, MaxHealth);
 
 		// 회복 처리 (자식 클래스에서 오버라이드 가능)
 		OnHealed(actualHealed);

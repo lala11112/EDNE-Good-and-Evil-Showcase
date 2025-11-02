@@ -24,10 +24,7 @@ namespace EDNE.UI
         [Header("Panels")]
         [SerializeField] private GameObject mainPanel;
         [SerializeField] private GameObject optionPanel;
-
-        [Header("Option Controls")]
-        [SerializeField] private Slider volumeSlider;
-        [SerializeField] private Toggle fullScreenToggle;
+        [SerializeField] private OptionPanelController optionPanelController;
 
         private void Start()
         {
@@ -36,6 +33,15 @@ namespace EDNE.UI
             
             // 처음에는 메인 패널만 활성화
             ShowMainPanel();
+        }
+
+        private void InitializeOptionPanel()
+        {
+            // OptionPanelController의 닫기 이벤트 구독
+            if (optionPanelController != null)
+            {
+                optionPanelController.OnPanelClosed.AddListener(ShowMainPanel);
+            }
         }
 
         #region Button Initialization
@@ -51,21 +57,6 @@ namespace EDNE.UI
             
             if (quitGameButton != null)
                 quitGameButton.onClick.AddListener(OnQuitGameClicked);
-        }
-
-        private void InitializeOptionPanel()
-        {
-            if (volumeSlider != null)
-            {
-                volumeSlider.value = AudioListener.volume;
-                volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
-            }
-
-            if (fullScreenToggle != null)
-            {
-                fullScreenToggle.isOn = Screen.fullScreen;
-                fullScreenToggle.onValueChanged.AddListener(OnFullScreenToggled);
-            }
         }
 
         #endregion
@@ -92,34 +83,75 @@ namespace EDNE.UI
 
         #endregion
 
-        #region Option Events
-
-        private void OnVolumeChanged(float value)
-        {
-            UIManager.Instance.SetMasterVolume(value);
-        }
-
-        private void OnFullScreenToggled(bool isOn)
-        {
-            Screen.fullScreen = isOn;
-            PlayerPrefs.SetInt("FullScreen", isOn ? 1 : 0);
-            PlayerPrefs.Save();
-        }
-
-        #endregion
-
         #region Panel Management
 
         private void ShowMainPanel()
         {
-            if (mainPanel != null) mainPanel.SetActive(true);
-            if (optionPanel != null) optionPanel.SetActive(false);
+            Debug.Log("[TitleUI] ShowMainPanel 호출");
+            
+            // MainPanel은 항상 활성화 (배경으로 유지)
+            if (mainPanel != null)
+            {
+                // MainPanel의 버튼만 활성화
+                SetMainPanelInteractable(true);
+                Debug.Log("[TitleUI] MainPanel 상호작용 활성화");
+            }
+            else
+            {
+                Debug.LogError("[TitleUI] MainPanel이 연결되지 않았습니다!");
+            }
+            
+            if (optionPanel != null)
+            {
+                optionPanel.SetActive(false);
+                Debug.Log("[TitleUI] OptionPanel 비활성화");
+            }
+            else
+            {
+                Debug.LogError("[TitleUI] OptionPanel이 연결되지 않았습니다!");
+            }
         }
 
         private void ShowOptionPanel()
         {
-            if (mainPanel != null) mainPanel.SetActive(false);
-            if (optionPanel != null) optionPanel.SetActive(true);
+            Debug.Log("[TitleUI] ShowOptionPanel 호출");
+            
+            // MainPanel을 끄지 않고 뒤에 유지 (상호작용만 비활성화)
+            if (mainPanel != null)
+            {
+                // MainPanel의 버튼만 비활성화 (보이지만 클릭 안 됨)
+                SetMainPanelInteractable(false);
+                Debug.Log("[TitleUI] MainPanel 상호작용 비활성화");
+            }
+            else
+            {
+                Debug.LogWarning("[TitleUI] MainPanel이 연결되지 않았습니다!");
+            }
+            
+            if (optionPanel != null)
+            {
+                optionPanel.SetActive(true);
+                Debug.Log($"[TitleUI] OptionPanel 활성화 - Position: {optionPanel.transform.position}");
+            }
+            else
+            {
+                Debug.LogError("[TitleUI] OptionPanel이 연결되지 않았습니다!");
+            }
+        }
+
+        /// <summary>
+        /// MainPanel의 버튼들 상호작용 설정
+        /// </summary>
+        private void SetMainPanelInteractable(bool interactable)
+        {
+            if (gameStartButton != null)
+                gameStartButton.interactable = interactable;
+            
+            if (optionButton != null)
+                optionButton.interactable = interactable;
+            
+            if (quitGameButton != null)
+                quitGameButton.interactable = interactable;
         }
 
         #endregion

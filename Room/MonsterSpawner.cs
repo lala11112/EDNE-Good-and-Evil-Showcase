@@ -50,16 +50,31 @@ public class MonsterSpawner : MonoBehaviour
     [Tooltip("이 스포너가 속한 RoomController")]
     [SerializeField] private RoomController connectedRoomController;
 
+    // 컴포넌트
+    private AudioSource audioSource;
+
     // 현재 스폰 대기 중인 몬스터 데이터
     private MonsterSpawnData currentSpawnData;
     private float spawnTimer;
     private bool isSpawning = false;
+    
+    // 스폰 이펙트 인스턴스 (스폰 시 삭제용)
+    private GameObject currentSpawnEffectInstance;
 
     /// <summary>
     /// 스포너 초기화
     /// </summary>
     private void Awake()
     {
+        // AudioSource 컴포넌트 자동 할당 또는 추가
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+        {
+            audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.playOnAwake = false;
+            audioSource.spatialBlend = 0f; // 2D 사운드
+        }
+        
         // 스포너 표시 이펙트 활성화
         if (spawnerIndicator != null)
         {
@@ -121,6 +136,13 @@ public class MonsterSpawner : MonoBehaviour
                 Debug.Log($"[MonsterSpawner] {spawnerName}에서 RoomController 자동 찾기 성공: {connectedRoomController.name}");
             }
         }
+        
+        // ⭐ 이미 스폰 중이면 이전 이펙트를 제거하고 새로운 스폰으로 덮어씀
+        if (isSpawning)
+        {
+            Debug.LogWarning($"[MonsterSpawner] {spawnerName}이 이미 스폰 중입니다. 이전 스폰을 취소하고 새로운 스폰을 시작합니다.");
+            RemoveSpawnEffect(); // 이전 이펙트 제거
+        }
 
         currentSpawnData = spawnData;
         spawnTimer = warningTime;
@@ -131,6 +153,13 @@ public class MonsterSpawner : MonoBehaviour
         {
             warningEffect.SetActive(true);
         }
+        
+        // 스폰 위치 미리 계산
+        Vector3 spawnPosition = GetSpawnPosition();
+        
+        // 스폰 예고 이펙트와 효과음 재생 (스폰 전에 표시)
+        PlaySpawnEffectPrepare(spawnPosition);
+        PlaySpawnWarningSound();
 
         Debug.Log($"[MonsterSpawner] {spawnerName}에서 {spawnData.monsterPrefab.name} 스폰 시작 (대기시간: {warningTime}초)");
     }
@@ -164,6 +193,9 @@ public class MonsterSpawner : MonoBehaviour
             {
                 Debug.Log($"[MonsterSpawner] 연결된 RoomController 사용: {connectedRoomController.name}");
                 
+                // 몬스터에 RoomController 설정 (분열 몬스터 등록용)
+                monsterController.SetRoomController(connectedRoomController);
+                
                 // 몬스터 등록
                 connectedRoomController.RegisterMonster(monsterController);
                 
@@ -181,8 +213,11 @@ public class MonsterSpawner : MonoBehaviour
             Debug.LogError($"[MonsterSpawner] {spawnerName}에서 MonsterController를 찾을 수 없습니다!");
         }
 
-        // 스폰 이펙트 재생
-        PlaySpawnEffect(spawnPosition);
+        // 스폰 사운드 재생
+        PlaySpawnSound();
+        
+        // 스폰 이펙트 제거 (미리 재생된 이펙트 삭제)
+        RemoveSpawnEffect();
 
         // 스폰 완료
         string spawnedMonsterName = currentSpawnData.monsterPrefab.name;
@@ -228,13 +263,100 @@ public class MonsterSpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// 스폰 이펙트 재생
+    /// 스폰 이펙트 미리 재생 (스폰 전에 표시)
     /// </summary>
-    private void PlaySpawnEffect(Vector3 position)
+    private void PlaySpawnEffectPrepare(Vector3 position)
     {
-        // 스폰 이펙트가 설정되어 있으면 재생
-        // TODO: 이펙트 시스템 구현
-        Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 이펙트 재생");
+        // 이전 이펙트가 있다면 삭제
+        if (currentSpawnEffectInstance != null)
+        {
+            Destroy(currentSpawnEffectInstance);
+        }
+        
+        // RoomControllerSO 데이터 가져오기
+        if (connectedRoomController != null)
+        {
+            RoomControllerSO roomData = connectedRoomController.GetRoomData();
+            
+            if (roomData != null)
+            {
+                // 스폰 이펙트 재생 (스폰 전에 미리 표시)
+                if (roomData.spawnEffect != null)
+                {
+                    currentSpawnEffectInstance = Instantiate(roomData.spawnEffect, position, Quaternion.identity);
+                    Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 예고 이펙트 재생");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[MonsterSpawner] {spawnerName}에서 RoomControllerSO 데이터를 가져올 수 없습니다.");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[MonsterSpawner] {spawnerName}에 연결된 RoomController가 없습니다.");
+        }
+    }
+    
+    /// <summary>
+    /// 스폰 예고 효과음 재생 (스폰 전에 재생)
+    /// </summary>
+    private void PlaySpawnWarningSound()
+    {
+        // RoomControllerSO 데이터 가져오기
+        if (connectedRoomController != null)
+        {
+            RoomControllerSO roomData = connectedRoomController.GetRoomData();
+            
+            if (roomData != null)
+            {
+                // 스폰 예고 효과음 재생
+                if (roomData.spawnWarningSound != null && audioSource != null)
+                {
+                    audioSource.PlayOneShot(roomData.spawnWarningSound);
+                    Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 예고 효과음 재생: {roomData.spawnWarningSound.name}");
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 스폰 사운드 재생 (실제 스폰 시 재생)
+    /// </summary>
+    private void PlaySpawnSound()
+    {
+        // RoomControllerSO 데이터 가져오기
+        if (connectedRoomController != null)
+        {
+            RoomControllerSO roomData = connectedRoomController.GetRoomData();
+            
+            if (roomData != null)
+            {
+                // 스폰 사운드 재생
+                if (roomData.spawnSound != null && audioSource != null)
+                {
+                    audioSource.PlayOneShot(roomData.spawnSound);
+                    Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 사운드 재생: {roomData.spawnSound.name}");
+                }
+                else if (roomData.spawnSound == null)
+                {
+                    Debug.LogWarning($"[MonsterSpawner] {spawnerName}의 RoomControllerSO에 spawnSound가 설정되지 않았습니다.");
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 스폰 이펙트 제거
+    /// </summary>
+    private void RemoveSpawnEffect()
+    {
+        if (currentSpawnEffectInstance != null)
+        {
+            Destroy(currentSpawnEffectInstance);
+            currentSpawnEffectInstance = null;
+            Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 이펙트 제거");
+        }
     }
 
     /// <summary>
@@ -245,6 +367,9 @@ public class MonsterSpawner : MonoBehaviour
         isActive = false;
         isSpawning = false;
         currentSpawnData = null;
+        
+        // 스폰 이펙트 제거
+        RemoveSpawnEffect();
         
         if (warningEffect != null)
         {

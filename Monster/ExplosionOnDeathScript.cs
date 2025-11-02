@@ -11,19 +11,43 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     #region Inspector Fields - 인스펙터 필드
     
     [Header("자폭 설정")]
+    [Tooltip("자폭 반경 (월드 단위)")]
     [SerializeField] public float explosionRadius = 3f;
+    [Tooltip("자폭 피해량")]
     [SerializeField] private int explosionDamage = 50;
+    [Tooltip("피해 가해자 엔티티 타입")]
     [SerializeField] private EntityType attackerType = EntityType.Monster;
     
+    [Header("타이밍 설정")]
+    [Tooltip("죽은 후 자폭까지 대기 시간 (초)")]
+    [SerializeField] private float deathExplosionDelay = 0f;
+    
     [Header("시각적 효과 설정")]
+    [Tooltip("자폭 직후 반경 시각 효과 표시 여부")]
     [SerializeField] private bool showExplosionEffect = true;
+    [Tooltip("자폭/프리뷰 반경 색상")]
     [SerializeField] private Color explosionColor = Color.red;
+    [Tooltip("자폭 시각 효과 표시 시간 (초)")]
     [SerializeField] private float explosionDuration = 0.5f;
+    [Tooltip("자폭 VFX 프리팹 (선택)")]
     [SerializeField] private GameObject explosionEffectPrefab; // 자폭 이펙트 프리팹
     
+    [Header("프리뷰 설정")]
+    [Tooltip("자폭 전에 반경 프리뷰를 표시")]
+    [SerializeField] private bool showPreviewBeforeExplosion = true; // 자폭 전 반경 프리뷰 노출
+    [Tooltip("프리뷰 반경 색상")]
+    [SerializeField] private Color previewColor = Color.red; // 프리뷰 색상
+    [Tooltip("프리뷰가 유지되는 시간 (초)")]
+    [SerializeField] private float preExplosionDelay = 0.5f; // 프리뷰 유지 시간
+    [Tooltip("프리뷰 투명도 (0~1)")]
+    [SerializeField] private float previewAlpha = 0.7f; // 프리뷰 투명도
+    
     [Header("플레이어 감지 설정")]
+    [Tooltip("피해를 적용할 대상 레이어 마스크")]
     [SerializeField] private LayerMask playerLayerMask = -1; // 플레이어 레이어
+    [Tooltip("시작 시 PlayerController에서 플레이어 자동 찾기")]
     [SerializeField] private bool autoFindPlayer = true;
+    [Tooltip("직접 지정할 타겟 플레이어 (선택)")]
     [SerializeField] private Transform targetPlayer;
     
     #endregion
@@ -98,16 +122,26 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     /// </summary>
     private IEnumerator ExecuteExplosion()
     {
-        // 1. 시각적 효과 표시
-        if (showExplosionEffect)
+        // 1. 자폭 반경 프리뷰 즉시 표시
+        GameObject previewVisual = CreateExplosionVisual(previewColor, previewAlpha);
+        
+        // 2. 자폭까지 대기: deathExplosionDelay가 설정되면 우선 사용, 아니면 preExplosionDelay 사용
+        float waitSeconds = deathExplosionDelay > 0f ? deathExplosionDelay : preExplosionDelay;
+        if (waitSeconds > 0f)
         {
-            yield return StartCoroutine(ShowExplosionEffect());
+            yield return new WaitForSeconds(waitSeconds);
         }
         
-        // 2. 피해 적용
+        // 프리뷰 제거
+        if (previewVisual != null)
+        {
+            Destroy(previewVisual);
+        }
+        
+        // 3. 피해 적용
         ApplyExplosionDamage();
         
-        // 3. 이펙트 프리팹 생성 (있는 경우)
+        // 4. 이펙트 프리팹 생성 (있는 경우)
         if (explosionEffectPrefab != null)
         {
             CreateExplosionEffect();
@@ -120,7 +154,7 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     private IEnumerator ShowExplosionEffect()
     {
         // 자폭 범위를 시각적으로 표시하는 원형 스프라이트 생성
-        GameObject explosionVisual = CreateExplosionVisual();
+        GameObject explosionVisual = CreateExplosionVisual(explosionColor, 0.7f);
         
         if (explosionVisual != null)
         {
@@ -133,9 +167,22 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     }
     
     /// <summary>
+    /// 자폭 전 프리뷰 표시 (반경 노출 후 대기)
+    /// </summary>
+    private IEnumerator ShowExplosionPreview()
+    {
+        GameObject previewVisual = CreateExplosionVisual(previewColor, previewAlpha);
+        if (previewVisual != null)
+        {
+            yield return new WaitForSeconds(preExplosionDelay);
+            Destroy(previewVisual);
+        }
+    }
+    
+    /// <summary>
     /// 자폭 시각적 효과 오브젝트 생성
     /// </summary>
-    private GameObject CreateExplosionVisual()
+    private GameObject CreateExplosionVisual(Color ringColor, float alpha)
     {
         GameObject visual = new GameObject("ExplosionVisual");
         visual.transform.position = transform.position;
@@ -148,7 +195,7 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         SpriteRenderer sr = visual.AddComponent<SpriteRenderer>();
         
         // 기본 원형 스프라이트 생성 (PPU를 텍스처 크기로 설정하여 스케일=월드유닛)
-        Texture2D circleTexture = CreateCircleTexture(64, explosionColor);
+        Texture2D circleTexture = CreateCircleTexture(64, ringColor);
         sr.sprite = Sprite.Create(
             circleTexture,
             new Rect(0, 0, circleTexture.width, circleTexture.height),
@@ -157,8 +204,8 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         );
         
         // 투명도 설정
-        Color color = explosionColor;
-        color.a = 0.7f;
+        Color color = ringColor;
+        color.a = alpha;
         sr.color = color;
         
         return visual;
@@ -264,6 +311,22 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     public void SetExplosionDamage(int damage)
     {
         explosionDamage = damage;
+    }
+    
+    /// <summary>
+    /// 사망 후 자폭까지의 지연 시간 설정 (외부 스크립트에서 조정용)
+    /// </summary>
+    public void SetDeathExplosionDelay(float seconds)
+    {
+        deathExplosionDelay = Mathf.Max(0f, seconds);
+    }
+    
+    /// <summary>
+    /// 자폭 전 프리뷰 유지 시간 설정 (외부 스크립트에서 조정용)
+    /// </summary>
+    public void SetPreExplosionDelay(float seconds)
+    {
+        preExplosionDelay = Mathf.Max(0f, seconds);
     }
     
     /// <summary>
