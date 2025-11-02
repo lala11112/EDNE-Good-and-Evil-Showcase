@@ -58,6 +58,9 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("S랭크 시 수리검 관통 여부")]
 	[SerializeField] private bool sRankPiercing = true;
 	
+	[Tooltip("수리검 발사 효과음")]
+	[SerializeField] private AudioClip shurikenThrowSound;
+	
 	#endregion
 	
 	#region 돌진 설정
@@ -80,6 +83,9 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("돌진 중 충돌 감지 반경")]
 	[SerializeField] private float dashCollisionRadius = 1f;
+	
+	[Tooltip("돌진 효과음")]
+	[SerializeField] private AudioClip dashSound;
 	
 	#endregion
 	
@@ -108,6 +114,7 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	private bool isInRechargeMode = false;
 	private int currentRechargeCount = 0;
 	private float remainingTime = 0f;
+	private float rechargeStartTime = 0f; // 재사용 모드 시작 시간
 	
 	// 외부 접근용 프로퍼티
 	public bool IsInRechargeMode => isInRechargeMode;
@@ -216,14 +223,18 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	{
 		if (playerController == null) return;
 		
+		Debug.Log($"[FaithDashHandler] Use 호출 - isInRechargeMode: {isInRechargeMode}");
+		
 		// 재사용 모드가 아니면 초기 발동 (수리검 발사)
 		if (!isInRechargeMode)
 		{
+			Debug.Log("[FaithDashHandler] 초기 발동: 수리검 발사");
 			ExecuteInitialShot(rank);
 		}
 		// 재사용 모드면 돌진 실행
 		else
 		{
+			Debug.Log("[FaithDashHandler] 재사용 모드: 돌진 실행");
 			ExecuteDash(rank);
 		}
 	}
@@ -262,6 +273,12 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		if (isInRechargeMode)
 		{
 			UpdateCurrentTarget();
+		}
+		
+		// 디버그: 재사용 모드 상태 출력 (1초마다)
+		if (Time.frameCount % 60 == 0 && isInRechargeMode)
+		{
+			Debug.Log($"[FaithDashHandler] 재사용 모드 활성: 남은 시간 {remainingTime:F1}초, 타겟: {(currentTargetEnemy != null ? currentTargetEnemy.name : "없음")}");
 		}
 	}
 	
@@ -303,6 +320,19 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			Debug.LogWarning("[FaithDashHandler] 수리검 프리팹이 설정되지 않았습니다!");
 			return;
+		}
+		
+		// 수리검 발사 효과음 재생
+		if (shurikenThrowSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f;
+			}
+			audioSource.PlayOneShot(shurikenThrowSound);
 		}
 		
 		// 4방향 정의 (상, 하, 좌, 우)
@@ -424,6 +454,7 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		isInRechargeMode = true;
 		currentRechargeCount = Mathf.Min(count, maxRechargeCount);
 		remainingTime = Mathf.Min(duration, maxSkillDuration);
+		rechargeStartTime = Time.time; // 시작 시간 기록
 		
 		// 재사용 준비 이펙트 생성
 		if (rechargeReadyEffectPrefab != null && activeRechargeEffect == null)
@@ -448,7 +479,7 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		}
 		rechargeCoroutine = StartCoroutine(RechargeTimer());
 		
-		Debug.Log($"[FaithDashHandler] 재사용 모드 시작 - 지속 시간: {remainingTime}초");
+		Debug.Log($"[FaithDashHandler] 재사용 모드 시작 - 지속 시간: {remainingTime}초 (표식 체크 유예 1초)");
 	}
 	
 	/// <summary>
@@ -647,6 +678,19 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private IEnumerator DashCoroutine(Vector3 targetPos, SkillRank rank)
 	{
+		// 돌진 효과음 재생
+		if (dashSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f;
+			}
+			audioSource.PlayOneShot(dashSound);
+		}
+		
 		// 무적 활성화
 		bool wasInvincible = playerController.IsInvincible;
 		if (invincibleDuringDash && !wasInvincible)
@@ -672,6 +716,11 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			trail = Instantiate(dashTrailPrefab, playerController.transform.position, Quaternion.identity);
 			trail.transform.SetParent(playerController.transform);
+			Debug.Log("[FaithDashHandler] 돌진 궤적 이펙트 생성");
+		}
+		else
+		{
+			Debug.LogWarning("[FaithDashHandler] dashTrailPrefab이 설정되지 않았습니다!");
 		}
 		
 		// 돌진 시작
@@ -843,7 +892,33 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	{
 		if (!isInRechargeMode) return;
 		
-		// 표식이 있는 적이 있는지 먼저 확인
+		// ⭐ 재사용 모드 시작 후 1초 이내에는 표식 체크 안 함 (수리검이 날아가는 시간)
+		float timeSinceRechargeStart = Time.time - rechargeStartTime;
+		EntityController newTarget = SelectDashTarget();
+		
+		if (timeSinceRechargeStart < 1f)
+		{
+			// 1초 이내에는 타겟만 업데이트하고 표식 체크는 안 함
+			if (newTarget != currentTargetEnemy)
+			{
+				currentTargetEnemy = newTarget;
+				
+				// 타겟이 변경되면 이전 UI 제거하고 새로 생성
+				if (activeTargetUI != null)
+				{
+					Destroy(activeTargetUI);
+					activeTargetUI = null;
+				}
+			}
+			
+			if (currentTargetEnemy != null)
+			{
+				CreateOrUpdateTargetUI();
+			}
+			return;
+		}
+		
+		// 표식이 있는 적이 있는지 확인 (1초 이후부터만)
 		if (!HasAnyMarkedEnemy())
 		{
 			// 표식이 있는 적이 없으면 재사용 모드 종료
@@ -857,13 +932,17 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// ⭐ 매 프레임마다 타겟을 재선택 (플레이어 방향 변화에 따라 타겟이 동적으로 변경됨)
-		EntityController newTarget = SelectDashTarget();
-		
 		// 타겟이 변경되었는지 확인
 		if (newTarget != currentTargetEnemy)
 		{
 			currentTargetEnemy = newTarget;
+			
+			// 타겟이 변경되면 이전 UI 제거하고 새로 생성
+			if (activeTargetUI != null)
+			{
+				Destroy(activeTargetUI);
+				activeTargetUI = null;
+			}
 			
 			if (currentTargetEnemy != null)
 			{
@@ -936,6 +1015,13 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			if (entity.EntityType == EntityType.Player || !entity.IsAlive)
 			{
 				// 죽은 적의 UI 제거
+				RemoveMarkUI(entity);
+				continue;
+			}
+			
+			// ⭐ 현재 돌진 타겟인 적은 표식 UI 표시 안 함 (타겟 UI만 표시)
+			if (entity == currentTargetEnemy)
+			{
 				RemoveMarkUI(entity);
 				continue;
 			}

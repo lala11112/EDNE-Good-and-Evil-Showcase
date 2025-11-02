@@ -141,7 +141,12 @@ public class MonsterSpawner : MonoBehaviour
         if (isSpawning)
         {
             Debug.LogWarning($"[MonsterSpawner] {spawnerName}이 이미 스폰 중입니다. 이전 스폰을 취소하고 새로운 스폰을 시작합니다.");
-            RemoveSpawnEffect(); // 이전 이펙트 제거
+            // 이전 스폰 완전히 취소
+            RemoveSpawnEffect();
+            if (warningEffect != null)
+            {
+                warningEffect.SetActive(false);
+            }
         }
 
         currentSpawnData = spawnData;
@@ -270,7 +275,9 @@ public class MonsterSpawner : MonoBehaviour
         // 이전 이펙트가 있다면 삭제
         if (currentSpawnEffectInstance != null)
         {
+            Debug.Log($"[MonsterSpawner] {spawnerName}에서 이전 스폰 이펙트 제거");
             Destroy(currentSpawnEffectInstance);
+            currentSpawnEffectInstance = null;
         }
         
         // RoomControllerSO 데이터 가져오기
@@ -284,7 +291,11 @@ public class MonsterSpawner : MonoBehaviour
                 if (roomData.spawnEffect != null)
                 {
                     currentSpawnEffectInstance = Instantiate(roomData.spawnEffect, position, Quaternion.identity);
-                    Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 예고 이펙트 재생");
+                    Debug.Log($"[MonsterSpawner] {spawnerName}에서 스폰 예고 이펙트 재생 at {position}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[MonsterSpawner] {spawnerName}의 RoomControllerSO에 spawnEffect가 설정되지 않았습니다.");
                 }
             }
             else
