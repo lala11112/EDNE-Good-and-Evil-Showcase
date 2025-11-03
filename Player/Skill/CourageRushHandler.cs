@@ -154,12 +154,7 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// 정신력 소모 체크
-		int mentalCost = CalculateMentalCost(rank);
-		if (!playerController.TryConsumeMentalPower(mentalCost))
-		{
-			return;
-		}
+		// ⭐ 정신력 소모 체크는 SkillSlot에서 처리됨
 		
 		// S랭크 모드 체크
 		if (rank == SkillRank.S && !isInSRankMode)
@@ -484,9 +479,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	}
 	
 	/// <summary>
-	/// 정신력 소모 계산
+	/// 정신력 소모 계산 (SkillSlot에서 호출)
 	/// </summary>
-	private int CalculateMentalCost(SkillRank rank)
+	public int CalculateMentalCost(SkillRank rank)
 	{
 		int cost = skillData.mentalCost;
 		

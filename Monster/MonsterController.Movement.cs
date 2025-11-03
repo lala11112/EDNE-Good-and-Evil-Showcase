@@ -58,9 +58,15 @@ public partial class MonsterController : EntityController
     {
         if (navAgent == null || target == null) return;
         
-        // NavMeshAgent에 목적지 설정 (2D: Z축 0으로 고정)
+        // ⭐ NavMeshAgent에 목적지 설정 (2D: Z축 강제 0으로 고정)
         Vector3 targetPos = target.position;
-        targetPos.z = 0f;
+        targetPos.z = 0f;  // Z축 강제 고정
+        
+        // ⭐ 현재 위치도 Z축 0으로 강제 고정
+        Vector3 currentPos = transform.position;
+        currentPos.z = 0f;
+        transform.position = currentPos;
+        
         navAgent.SetDestination(targetPos);
         
         // isStopped를 false로 (이동 재개)
@@ -90,35 +96,41 @@ public partial class MonsterController : EntityController
     
     /// <summary>
     /// 2D 프로젝트를 위한 Z축 고정
-    /// ⚠️ NavMeshPlus 설정이 올바르면 Z축 drift가 발생하지 않음
-    /// 경고 발생 시에만 디버깅용으로 활성화
+    /// NavMeshPlus에서 Z축 drift 방지
     /// </summary>
     private void Fix2DPosition()
     {
-        // ⭐ 성능 최적화: Z축 체크를 매 프레임이 아닌 조건부로만 실행
-        #if UNITY_EDITOR || DEBUG
+        // ⭐ Z축을 항상 0으로 강제 고정 (성능 최적화를 위해 조건부 실행)
         Vector3 pos = transform.position;
-        if (Mathf.Abs(pos.z) > 0.01f)  // Z축이 0이 아니면 고정 및 경고
+        if (Mathf.Abs(pos.z) > 0.001f)  // Z축이 거의 0이 아니면 고정
         {
             pos.z = 0f;
             transform.position = pos;
-            Debug.LogWarning($"[MonsterController] {gameObject.name} Z축 drift 감지 및 수정 (NavMeshPlus 설정 확인 필요)");
+            
+            // ⭐ NavMeshAgent의 목적지도 Z축 0으로 강제 고정
+            if (navAgent != null && navAgent.enabled)
+            {
+                Vector3 dest = navAgent.destination;
+                dest.z = 0f;
+                navAgent.destination = dest;
+            }
+            
+            #if UNITY_EDITOR || DEBUG
+            Debug.LogWarning($"[MonsterController] {gameObject.name} Z축 drift 감지 및 수정: {pos.z} -> 0");
+            #endif
         }
-        #endif
-        
-        // ⭐ 릴리즈 빌드에서는 아예 실행 안함 (성능 최적화)
     }
     
     /// <summary>
     /// 스프라이트 좌우 반전 (이동 방향에 따라)
-    /// ⭐ SpriteRenderer.flipX 사용 (권장)
+    /// SpriteRenderer.flipX 사용 (권장)
     /// </summary>
     private void FlipSprite(float directionX)
     {
         if (Mathf.Abs(directionX) < 0.01f) return; // 방향이 없으면 무시
         if (spriteRenderer == null) return; // SpriteRenderer 없으면 무시
         
-        // ⭐ SpriteRenderer.flipX 사용 (Transform.localScale보다 성능/안정성 우수)
+        // SpriteRenderer.flipX 사용 (Transform.localScale보다 성능/안정성 우수)
         if (directionX < 0)  // 왼쪽으로 이동
         {
             spriteRenderer.flipX = true;

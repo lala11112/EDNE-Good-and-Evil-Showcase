@@ -55,6 +55,9 @@ public class PlayerController : EntityController
 	
 	[Tooltip("최대 정신력")]
 	[SerializeField] private int maxMentalPower;
+	
+	[Tooltip("누적 회복량 (소수점 회복량 저장용, 1 이상이 되면 정수로 변환하여 적용)")]
+	private float accumulatedRegen = 0f;
 
 	#endregion
 
@@ -68,7 +71,7 @@ public class PlayerController : EntityController
 	[SerializeField] private CourageState currentCourageState;
 
 	[Tooltip("현재 스킬 랭크 (용기 단계에 따라 자동 결정)")]
-	[SerializeField] private SkillRank currentSkillRank;
+	[SerializeField] public SkillRank currentSkillRank;
 
 	#endregion
 
@@ -83,6 +86,26 @@ public class PlayerController : EntityController
 
 	[Tooltip("현재 이동 방향 (8방향)")]
 	[SerializeField] private MoveDirection currentMoveDirection = MoveDirection.None;
+
+	#endregion
+
+	#region 런타임 상태 - 넉백
+
+	[Header("넉백 상태")]
+	[Tooltip("넉백 방향 (정규화된 벡터)")]
+	[SerializeField] private Vector2 knockbackDirection;
+
+	[Tooltip("넉백 초기 힘")]
+	[SerializeField] private float knockbackForce;
+
+	[Tooltip("넉백 지속 시간")]
+	[SerializeField] private float knockbackDuration;
+
+	[Tooltip("넉백 경과 시간")]
+	[SerializeField] private float knockbackElapsedTime;
+
+	[Tooltip("넉백 중인지 여부")]
+	[SerializeField] private bool isKnockedBack;
 
 	#endregion
 
@@ -148,7 +171,7 @@ public class PlayerController : EntityController
 	{
 		base.Awake();
 		
-		// ⭐ 싱글톤 설정
+		// 싱글톤 설정
 		if (Instance == null)
 		{
 			Instance = this;
@@ -227,11 +250,16 @@ public class PlayerController : EntityController
 		// 정신력 자동 회복
 		UpdateMentalPowerRegeneration(Time.deltaTime);
 
+		// 넉백 타이머 업데이트 (우선 처리)
+		UpdateKnockbackTimer(Time.deltaTime);
+
 		// 이동 입력 처리
 		UpdateMovementInput();
 
 		// 애니메이터 파라미터 업데이트
 		UpdateAnimatorParameters();
+
+
 	}
 
 	private void FixedUpdate()
@@ -321,18 +349,33 @@ public class PlayerController : EntityController
 	private void UpdateMentalPowerRegeneration(float deltaTime)
 	{
 		if (playerData == null) return;
-		if (currentMentalPower >= maxMentalPower) return;
+		if (currentMentalPower >= maxMentalPower) 
+		{
+			// 최대치에 도달하면 누적 회복량 초기화
+			accumulatedRegen = 0f;
+			return;
+		}
 		if (!isAlive) return;
 
-		// 회복량 계산
+		// 회복량 누적 (소수점 단위로 정확하게 계산)
 		int previousMentalPower = currentMentalPower;
 		float regenAmount = playerData.mentalPowerRegenRate * deltaTime;
-		currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + Mathf.RoundToInt(regenAmount));
+		accumulatedRegen += regenAmount;
 		
-		// 실제로 회복되었을 때만 이벤트 발생
-		if (currentMentalPower != previousMentalPower)
+		// 누적 회복량이 1 이상이 되면 정수로 변환하여 적용
+		if (accumulatedRegen >= 1f)
 		{
-			PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			int regenToApply = Mathf.FloorToInt(accumulatedRegen); // 소수점 버림
+			accumulatedRegen -= regenToApply; // 적용한 만큼 차감
+			
+			// 정신력 회복 (최대치 초과 방지)
+			currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + regenToApply);
+			
+			// 실제로 회복되었을 때만 이벤트 발생
+			if (currentMentalPower != previousMentalPower)
+			{
+				PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			}
 		}
 	}
 
@@ -533,6 +576,102 @@ public class PlayerController : EntityController
 		}
 	}
 
+	#endregion
+
+	#region 넉백 시스템
+
+	/// <summary>
+	/// 넉백 적용
+	/// 트랩 등에서 호출하여 플레이어를 넉백시킵니다.
+	/// </summary>
+	/// <param name="direction">넉백 방향 (정규화하지 않아도 됨)</param>
+	/// <param name="force">넉백 힘</param>
+	/// <param name="duration">넉백 지속 시간 (초)</param>
+	public void ApplyKnockback(Vector2 direction, float force, float duration)
+	{
+		if (!isAlive) return; // 사망 시 넉백 불가
+		if (force <= 0f || duration <= 0f) return; // 유효하지 않은 값 무시
+
+		// 넉백 데이터 설정
+		knockbackDirection = direction.normalized; // 방향 정규화
+		knockbackForce = force;
+		knockbackDuration = duration;
+		knockbackElapsedTime = 0f;
+		isKnockedBack = true;
+
+		Debug.Log($"[PlayerController] 넉백 적용 - 방향: {knockbackDirection}, 힘: {force}, 시간: {duration}초");
+	}
+
+	/// <summary>
+	/// 넉백 타이머 업데이트
+	/// </summary>
+	/// <param name="deltaTime">델타 타임</param>
+	private void UpdateKnockbackTimer(float deltaTime)
+	{
+		if (!isKnockedBack) return;
+
+		// 경과 시간 증가
+		knockbackElapsedTime += deltaTime;
+
+		// 넉백 시간 종료 체크
+		if (knockbackElapsedTime >= knockbackDuration)
+		{
+			// 넉백 종료
+			EndKnockback();
+		}
+	}
+
+	/// <summary>
+	/// 넉백 처리 (FixedUpdate에서 호출)
+	/// 감쇠 처리 포함
+	/// </summary>
+	private void ProcessKnockback()
+	{
+		if (!isKnockedBack) return;
+
+		// 감쇠 계산 (시간이 지날수록 힘이 감소)
+		// 선형 감쇠: 1.0 → 0.0 (시간에 비례)
+		float dampingFactor = 1f - (knockbackElapsedTime / knockbackDuration);
+		
+		// 최소값 보장 (0보다 크게 유지)
+		dampingFactor = Mathf.Max(0f, dampingFactor);
+
+		// 현재 넉백 힘 계산 (초기 힘 × 감쇠 계수)
+		float currentForce = knockbackForce * dampingFactor;
+
+		// 넉백 velocity 적용
+		rb.linearVelocity = knockbackDirection * currentForce;
+
+		// 이동 방향은 None으로 설정 (넉백 중에는 이동 입력 무시)
+		currentMoveDirection = MoveDirection.None;
+	}
+
+	/// <summary>
+	/// 넉백 종료
+	/// </summary>
+	private void EndKnockback()
+	{
+		isKnockedBack = false;
+		knockbackElapsedTime = 0f;
+		knockbackForce = 0f;
+		knockbackDuration = 0f;
+
+		// 넉백 종료 시 속도는 0으로 설정 (이동 입력이 없으면 정지)
+		// 이동 입력이 있으면 다음 ProcessMovement에서 처리됨
+		rb.linearVelocity = Vector2.zero;
+
+		Debug.Log("[PlayerController] 넉백 종료");
+	}
+
+	/// <summary>
+	/// 넉백 중인지 확인
+	/// </summary>
+	/// <returns>넉백 중 여부</returns>
+	public bool IsKnockedBack()
+	{
+		return isKnockedBack;
+	}
+
 	/// <summary>
 	private void UpdateAnimatorParameters()
 	{
@@ -546,9 +685,19 @@ public class PlayerController : EntityController
 		animator.SetFloat("InputY", dir.y);
 	}
 
+	/// <summary>
+	/// 물리 기반 이동 처리
 	/// </summary>
 	private void ProcessMovement()
 	{
+		// ⭐ 넉백 우선 처리 (이동 입력 체크 전에 처리)
+		// 넉백 중에는 넉백 처리만 하고 일반 이동 처리는 하지 않음
+		if (isKnockedBack)
+		{
+			ProcessKnockback();
+			return; // 넉백 중에는 일반 이동 처리 건너뛰기
+		}
+
 		// 이동 불가 상태 체크
 		if (!CanMove())
 		{
@@ -685,6 +834,21 @@ public class PlayerController : EntityController
 	#region 스킬 연동
 
 	/// <summary>
+	/// 이동 가능 여부 체크 (오버라이드)
+	/// EntityController의 기본 체크에 넉백 체크 추가
+	/// </summary>
+	public override bool CanMove()
+	{
+		// 기본 체크 (생존, 상태효과)
+		if (!base.CanMove()) return false;
+
+		// 넉백 중에는 이동 입력 차단 (넉백 자체는 ProcessKnockback에서 처리)
+		if (isKnockedBack) return false;
+
+		return true;
+	}
+
+	/// <summary>
 	/// 스킬 사용 가능 여부 체크 (오버라이드)
 	/// EntityController의 기본 체크에 정신력 체크 추가
 	/// </summary>
@@ -692,6 +856,9 @@ public class PlayerController : EntityController
 	{
 		// 기본 체크 (생존, 상태효과)
 		if (!base.CanUseSkill()) return false;
+
+		// 넉백 중에는 스킬 사용 불가
+		if (isKnockedBack) return false;
 
 		// 정신력 체크는 개별 스킬에서 수행
 		// 여기서는 기본 조건만 체크

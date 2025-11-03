@@ -142,15 +142,19 @@ public partial class MonsterController : EntityController
         // NavMeshPlus 2D 설정
         navAgent.updateRotation = false;  // 2D에서는 회전 수동 관리
         navAgent.updateUpAxis = false;    // 2D에서는 Up 축 업데이트 안 함
-    
-        // 2D: Z축 고정 강제 (NavMesh가 XY 평면에 있어야 함)
-        // NavMeshAgent가 높이(elevation)를 무시하도록 설정
-        navAgent.baseOffset = 0f;  // 높이 오프셋 0
         
-        // 2D: Transform Z축 강제 고정
+        // ⭐ NavMeshPlus 2D 전용 설정
+        navAgent.baseOffset = 0f;  // 높이 오프셋 0
+        navAgent.height = 0.1f;    // 높이를 최소화 (2D용)
+        navAgent.radius = 0.5f;     // 반지름 설정
+        
+        // ⭐ 2D: Transform Z축 강제 고정 (매우 중요!)
         Vector3 pos = transform.position;
         pos.z = 0f;
         transform.position = pos;
+        
+        // ⭐ NavMeshAgent의 목적지도 Z축 0으로 강제 고정
+        navAgent.destination = new Vector3(navAgent.destination.x, navAgent.destination.y, 0f);
         
         // ⭐ Animator 컴포넌트 참조 (선택적)
         animator = GetComponent<Animator>();
