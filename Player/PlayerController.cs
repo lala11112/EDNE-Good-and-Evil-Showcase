@@ -55,6 +55,9 @@ public class PlayerController : EntityController
 	
 	[Tooltip("최대 정신력")]
 	[SerializeField] private int maxMentalPower;
+	
+	[Tooltip("누적 회복량 (소수점 회복량 저장용, 1 이상이 되면 정수로 변환하여 적용)")]
+	private float accumulatedRegen = 0f;
 
 	#endregion
 
@@ -68,7 +71,7 @@ public class PlayerController : EntityController
 	[SerializeField] private CourageState currentCourageState;
 
 	[Tooltip("현재 스킬 랭크 (용기 단계에 따라 자동 결정)")]
-	[SerializeField] private SkillRank currentSkillRank;
+	[SerializeField] public SkillRank currentSkillRank;
 
 	#endregion
 
@@ -148,7 +151,7 @@ public class PlayerController : EntityController
 	{
 		base.Awake();
 		
-		// ⭐ 싱글톤 설정
+		// 싱글톤 설정
 		if (Instance == null)
 		{
 			Instance = this;
@@ -232,6 +235,8 @@ public class PlayerController : EntityController
 
 		// 애니메이터 파라미터 업데이트
 		UpdateAnimatorParameters();
+
+
 	}
 
 	private void FixedUpdate()
@@ -321,18 +326,33 @@ public class PlayerController : EntityController
 	private void UpdateMentalPowerRegeneration(float deltaTime)
 	{
 		if (playerData == null) return;
-		if (currentMentalPower >= maxMentalPower) return;
+		if (currentMentalPower >= maxMentalPower) 
+		{
+			// 최대치에 도달하면 누적 회복량 초기화
+			accumulatedRegen = 0f;
+			return;
+		}
 		if (!isAlive) return;
 
-		// 회복량 계산
+		// 회복량 누적 (소수점 단위로 정확하게 계산)
 		int previousMentalPower = currentMentalPower;
 		float regenAmount = playerData.mentalPowerRegenRate * deltaTime;
-		currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + Mathf.RoundToInt(regenAmount));
+		accumulatedRegen += regenAmount;
 		
-		// 실제로 회복되었을 때만 이벤트 발생
-		if (currentMentalPower != previousMentalPower)
+		// 누적 회복량이 1 이상이 되면 정수로 변환하여 적용
+		if (accumulatedRegen >= 1f)
 		{
-			PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			int regenToApply = Mathf.FloorToInt(accumulatedRegen); // 소수점 버림
+			accumulatedRegen -= regenToApply; // 적용한 만큼 차감
+			
+			// 정신력 회복 (최대치 초과 방지)
+			currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + regenToApply);
+			
+			// 실제로 회복되었을 때만 이벤트 발생
+			if (currentMentalPower != previousMentalPower)
+			{
+				PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			}
 		}
 	}
 

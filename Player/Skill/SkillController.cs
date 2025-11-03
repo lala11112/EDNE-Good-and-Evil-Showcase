@@ -26,6 +26,8 @@ public class SkillController : MonoBehaviour
     private InputAction skillCAction;
     private InputAction skillVAction;
     
+    private PlayerController playerController;
+    
     private void Awake()
     {
         // Input Actions 초기화
@@ -33,6 +35,18 @@ public class SkillController : MonoBehaviour
         skillXAction = inputActions.FindAction("SkillX");
         skillCAction = inputActions.FindAction("SkillC");
         skillVAction = inputActions.FindAction("SkillV");
+        
+        // PlayerController 찾기 (자기 자신 또는 부모에서)
+        playerController = GetComponent<PlayerController>();
+        if (playerController == null)
+        {
+            playerController = GetComponentInParent<PlayerController>();
+        }
+        
+        if (playerController == null)
+        {
+            playerController = PlayerController.Instance; // 싱글톤 사용
+        }
     }
     
     private void Start()
@@ -91,25 +105,29 @@ public class SkillController : MonoBehaviour
         inputActions.Disable();
     }
     
-    // 스킬 사용 이벤트들 (간단해짐!)
+    // 스킬 사용 이벤트들 (현재 스킬 랭크 전달)
     private void OnSkillZPerformed(InputAction.CallbackContext context)
     {
-        zSlot?.ExecuteSkill();
+        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        zSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillXPerformed(InputAction.CallbackContext context)
     {
-        xSlot?.ExecuteSkill();
+        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        xSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillCPerformed(InputAction.CallbackContext context)
     {
-        cSlot?.ExecuteSkill();
+        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        cSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillVPerformed(InputAction.CallbackContext context)
     {
-        vSlot?.ExecuteSkill();
+        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        vSlot?.ExecuteSkill(rank);
     }
     
     // 슬롯 보장: 없으면 생성해서 붙임

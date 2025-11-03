@@ -90,7 +90,7 @@ public class SkillSlot : MonoBehaviour
             return;
         }
         
-        // ⭐ 기존 핸들러 정리 (스킬 변경 시에만)
+        // 기존 핸들러 정리 (스킬 변경 시에만)
         if (handler != null)
         {
             handler.Cleanup(); // 상태 초기화
@@ -106,7 +106,7 @@ public class SkillSlot : MonoBehaviour
         currentCooldown = 0f;
         totalCooldown = newSkillData != null ? newSkillData.cooldown : 0f;
 
-        // ⭐ 새 핸들러 생성 및 Setup (스킬 변경 시에만)
+        // 새 핸들러 생성 및 Setup (스킬 변경 시에만)
         if (currentSkillData != null && currentSkillData.handlerPrefab != null)
         {
             handlerGO = Instantiate(currentSkillData.handlerPrefab, transform);
@@ -129,6 +129,7 @@ public class SkillSlot : MonoBehaviour
     // 스킬 실행 (저장된 데이터 사용)
     public void ExecuteSkill(SkillRank rank = SkillRank.D)
     {
+        Debug.Log(rank);
         if (currentSkillData == null)
         {
             SkillUIEvents.InvokeSkillUseFailed(slotType, "스킬 없음");
@@ -143,7 +144,7 @@ public class SkillSlot : MonoBehaviour
             return;
         }
 
-        // ⭐ FaithDashHandler 특수 처리
+        // FaithDashHandler 특수 처리
         FaithDashHandler faithDashHandler = handler as FaithDashHandler;
         bool isFaithDash = (faithDashHandler != null);
         bool isFaithDashRecharging = (isFaithDash && faithDashHandler.IsInRechargeMode);
