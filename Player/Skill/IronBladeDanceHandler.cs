@@ -161,12 +161,7 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// 정신력 소모 체크
-		if (!playerController.TryConsumeMentalPower(skillData.mentalCost))
-		{
-			Debug.Log($"[IronBladeDanceHandler] 정신력이 부족합니다! (필요: {skillData.mentalCost})");
-			return;
-		}
+		// ⭐ 정신력 소모 체크는 SkillSlot에서 처리됨
 		
 		// S랭크 모드 체크 및 시작
 		if (rank == SkillRank.S && !isInSRankMode)

@@ -33,6 +33,8 @@ public class SkillSlot : MonoBehaviour
     private SkillHandlerInterface handler;        // 캐시
     private GameObject handlerGO;         // 인스턴스
     [SerializeField] private GameObject owner; // 플레이어 오브젝트 참조(없으면 transform.root 등)
+    private PlayerController playerController; // 플레이어 컨트롤러 참조
+    private SkillController skillController; // 스킬 컨트롤러 참조 (배율 관리용)
 
     private void Awake()
     {
@@ -40,7 +42,7 @@ public class SkillSlot : MonoBehaviour
         if (owner == null)
         {
             // 부모에서 PlayerController 찾기
-            PlayerController playerController = GetComponentInParent<PlayerController>();
+            playerController = GetComponentInParent<PlayerController>();
             if (playerController != null)
             {
                 owner = playerController.gameObject;
@@ -49,6 +51,28 @@ public class SkillSlot : MonoBehaviour
             {
                 Debug.LogWarning("[SkillSlot] PlayerController를 찾을 수 없습니다. owner를 수동으로 설정해주세요.");
             }
+        }
+        else
+        {
+            // owner가 설정되어 있으면 PlayerController 찾기
+            playerController = owner.GetComponent<PlayerController>();
+            if (playerController == null)
+            {
+                playerController = owner.GetComponentInParent<PlayerController>();
+            }
+        }
+        
+        // 싱글톤으로도 찾기 시도 (최후의 수단)
+        if (playerController == null)
+        {
+            playerController = PlayerController.Instance;
+        }
+        
+        // SkillController 찾기 (부모에서)
+        skillController = GetComponentInParent<SkillController>();
+        if (skillController == null && owner != null)
+        {
+            skillController = owner.GetComponentInParent<SkillController>();
         }
     }
 
@@ -120,6 +144,12 @@ public class SkillSlot : MonoBehaviour
             handler.Setup(currentSkillData, ownerGO);
         }
         
+        // SkillController에 가중치 업데이트 알림
+        if (skillController != null && currentSkillData != null)
+        {
+            skillController.UpdateSkillWeight(slotType, currentSkillData);
+        }
+        
         // 스킬 슬롯 변경 이벤트 발생
         SkillUIEvents.InvokeSkillSlotChanged(slotType, currentSkillData);
         
@@ -129,7 +159,6 @@ public class SkillSlot : MonoBehaviour
     // 스킬 실행 (저장된 데이터 사용)
     public void ExecuteSkill(SkillRank rank = SkillRank.D)
     {
-        Debug.Log(rank);
         if (currentSkillData == null)
         {
             SkillUIEvents.InvokeSkillUseFailed(slotType, "스킬 없음");
@@ -149,14 +178,73 @@ public class SkillSlot : MonoBehaviour
         bool isFaithDash = (faithDashHandler != null);
         bool isFaithDashRecharging = (isFaithDash && faithDashHandler.IsInRechargeMode);
         
-        Debug.Log($"[SkillSlot] ExecuteSkill - isFaithDash: {isFaithDash}, isRecharging: {isFaithDashRecharging}, isOnCooldown: {isOnCooldown}");
-        
         // 쿨타임 체크 (FaithDash 재사용 모드일 때는 쿨타임 무시)
         if (isOnCooldown && !isFaithDashRecharging)
         {
             SkillUIEvents.InvokeSkillUseFailed(slotType, $"쿨타임 ({currentCooldown:F1}초)");
             Debug.Log($"{currentSkillData.skillName} 스킬이 쿨타임 중입니다! ({currentCooldown:F1}초 남음)");
             return;
+        }
+
+        // ⭐ 정신력 소모 체크 (SkillSlot에서 통합 처리)
+        // 재사용 모드가 아닐 때만 정신력 소모 체크 (FaithDash 재사용 모드에서는 정신력 소모 안 함)
+        if (!isFaithDashRecharging && currentSkillData.mentalCost > 0)
+        {
+            // 기본 정신력 소모량 계산
+            int baseMentalCost = currentSkillData.mentalCost;
+            bool isRankBased = false;
+            
+            // CourageRushHandler처럼 랭크별 정신력 계산이 필요한 경우 처리
+            CourageRushHandler courageRushHandler = handler as CourageRushHandler;
+            if (courageRushHandler != null)
+            {
+                // CourageRushHandler의 CalculateMentalCost 메서드 사용 (랭크별 계산)
+                baseMentalCost = courageRushHandler.CalculateMentalCost(rank);
+                isRankBased = true;
+            }
+            
+            // SkillController로부터 현재 배율 가져오기
+            float multiplier = 1.0f;
+            if (skillController != null)
+            {
+                multiplier = skillController.GetMentalCostMultiplier(slotType);
+            }
+            
+            // 실제 정신력 소모량 = 기본 소모량 × 배율 (소수점 반올림)
+            int actualMentalCost = Mathf.RoundToInt(baseMentalCost * multiplier);
+            
+            // ⭐ 디버그: 정신력 소모 전 상태 로그
+            int mentalPowerBefore = playerController != null ? playerController.CurrentMentalPower : 0;
+            
+            Debug.Log($"[SkillSlot] {currentSkillData.skillName} 스킬 정신력 소모 계산:\n" +
+                $"  - 기본 소모량: {currentSkillData.mentalCost} (랭크별 계산: {isRankBased}, 계산된 값: {baseMentalCost})\n" +
+                $"  - 현재 배율: {multiplier:F3}\n" +
+                $"  - 실제 소모량: {baseMentalCost} × {multiplier:F3} = {actualMentalCost}\n" +
+                $"  - 소모 전 정신력: {mentalPowerBefore}/{playerController?.MaxMentalPower ?? 0}");
+            
+            if (playerController != null && !playerController.TryConsumeMentalPower(actualMentalCost))
+            {
+                SkillUIEvents.InvokeSkillUseFailed(slotType, $"정신력 부족 (필요: {actualMentalCost})");
+                Debug.LogWarning($"[SkillSlot] {currentSkillData.skillName} 스킬 사용 실패 - 정신력이 부족합니다! (필요: {actualMentalCost}, 현재: {playerController.CurrentMentalPower}, 배율: {multiplier:F3})");
+                return;
+            }
+            
+            // ⭐ 디버그: 정신력 소모 후 상태 로그
+            int mentalPowerAfter = playerController != null ? playerController.CurrentMentalPower : 0;
+            int actualConsumed = mentalPowerBefore - mentalPowerAfter;
+            
+            Debug.Log($"[SkillSlot] {currentSkillData.skillName} 스킬 정신력 소모 완료:\n" +
+                $"  - 소모량: {actualConsumed} (계산된 값: {actualMentalCost})\n" +
+                $"  - 소모 전: {mentalPowerBefore} → 소모 후: {mentalPowerAfter} (차이: -{actualConsumed})\n" +
+                $"  - 남은 정신력: {mentalPowerAfter}/{playerController?.MaxMentalPower ?? 0}");
+            
+            // ⭐ 정신력 소모 후 SkillController에 알림 (다른 스킬들의 배율 감소 처리)
+            // 정신력 소모가 있으면 항상 OnSkillUsed 호출 (배율 리셋 및 다른 스킬 감소)
+            if (skillController != null)
+            {
+                float reductionAmount = currentSkillData.otherSkillMentalCostReduction;
+                skillController.OnSkillUsed(slotType, reductionAmount);
+            }
         }
 
         // 스킬 사용 이벤트
