@@ -162,7 +162,7 @@ public class Shockwave : MonoBehaviour
     {
         if (targetEc == null) return false;
         if (hitEntities.Contains(targetEc)) return false;
-        bool applied = targetEc.ApplyDamage((int)damage, attackerType);
+        bool applied = targetEc.ApplyDamage((int)damage, attackerType, this);
         if (applied)
         {
             hitEntities.Add(targetEc);

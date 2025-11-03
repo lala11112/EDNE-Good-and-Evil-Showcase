@@ -60,8 +60,8 @@ public class SimpleFireball : MonoBehaviour, ISkillProjectile
         EntityController target = collision.GetComponent<EntityController>();
         if (target != null)
         {
-            // 데미지 적용 시도 (팀킬 방지 포함)
-            bool damageApplied = target.ApplyDamage((int)damage, attackerType);
+            // ⭐ 데미지 적용 시도 (팀킬 방지 포함, 자기 자신을 damageSource로 전달)
+            bool damageApplied = target.ApplyDamage((int)damage, attackerType, this);
             
             if (damageApplied)
             {

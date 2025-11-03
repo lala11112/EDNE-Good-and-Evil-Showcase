@@ -213,30 +213,12 @@ public class SkillSlot : MonoBehaviour
             // 실제 정신력 소모량 = 기본 소모량 × 배율 (소수점 반올림)
             int actualMentalCost = Mathf.RoundToInt(baseMentalCost * multiplier);
             
-            // ⭐ 디버그: 정신력 소모 전 상태 로그
-            int mentalPowerBefore = playerController != null ? playerController.CurrentMentalPower : 0;
-            
-            Debug.Log($"[SkillSlot] {currentSkillData.skillName} 스킬 정신력 소모 계산:\n" +
-                $"  - 기본 소모량: {currentSkillData.mentalCost} (랭크별 계산: {isRankBased}, 계산된 값: {baseMentalCost})\n" +
-                $"  - 현재 배율: {multiplier:F3}\n" +
-                $"  - 실제 소모량: {baseMentalCost} × {multiplier:F3} = {actualMentalCost}\n" +
-                $"  - 소모 전 정신력: {mentalPowerBefore}/{playerController?.MaxMentalPower ?? 0}");
-            
             if (playerController != null && !playerController.TryConsumeMentalPower(actualMentalCost))
             {
                 SkillUIEvents.InvokeSkillUseFailed(slotType, $"정신력 부족 (필요: {actualMentalCost})");
-                Debug.LogWarning($"[SkillSlot] {currentSkillData.skillName} 스킬 사용 실패 - 정신력이 부족합니다! (필요: {actualMentalCost}, 현재: {playerController.CurrentMentalPower}, 배율: {multiplier:F3})");
+                Debug.LogWarning($"[SkillSlot] {currentSkillData.skillName} 스킬 사용 실패 - 정신력 부족 (필요: {actualMentalCost}, 현재: {playerController.CurrentMentalPower})");
                 return;
             }
-            
-            // ⭐ 디버그: 정신력 소모 후 상태 로그
-            int mentalPowerAfter = playerController != null ? playerController.CurrentMentalPower : 0;
-            int actualConsumed = mentalPowerBefore - mentalPowerAfter;
-            
-            Debug.Log($"[SkillSlot] {currentSkillData.skillName} 스킬 정신력 소모 완료:\n" +
-                $"  - 소모량: {actualConsumed} (계산된 값: {actualMentalCost})\n" +
-                $"  - 소모 전: {mentalPowerBefore} → 소모 후: {mentalPowerAfter} (차이: -{actualConsumed})\n" +
-                $"  - 남은 정신력: {mentalPowerAfter}/{playerController?.MaxMentalPower ?? 0}");
             
             // ⭐ 정신력 소모 후 SkillController에 알림 (다른 스킬들의 배율 감소 처리)
             // 정신력 소모가 있으면 항상 OnSkillUsed 호출 (배율 리셋 및 다른 스킬 감소)
@@ -250,7 +232,16 @@ public class SkillSlot : MonoBehaviour
         // 스킬 사용 이벤트
         SkillUIEvents.InvokeSkillUsed(slotType, currentSkillData);
         
+        // ⭐ 랭크 시스템 디버그: 현재 랭크 출력
+        Debug.Log($"[SkillSlot] {currentSkillData.skillName} 스킬 사용 - 랭크: {rank} (용기 단계: {playerController?.CurrentCourageState}, 용기 점수: {playerController?.CourageScore})");
+        
         handler.Use(rank);
+        
+        // ⭐ 용기 시스템: 스킬 사용 기록 추가 (스킬 연계 판정용)
+        if (playerController != null)
+        {
+            playerController.OnSkillUsed(slotType);
+        }
         
         // ⭐ 쿨타임 시작 - FaithDash는 절대 여기서 쿨타임 시작 안 함 (재사용 모드 종료 시 시작)
         if (!isFaithDash)

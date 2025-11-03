@@ -37,6 +37,10 @@ public partial class MonsterController : EntityController
     private float runtimeDetectionRange;
     private float runtimeStopDistance;
     private float runtimeMoveSpeed;
+    
+    // ⭐ 용기 시스템용: 마지막 데미지를 준 스킬 타입
+    private SkillSlotType? lastDamageSkillSlotType = null;
+    private DamageSourceType lastDamageSourceType = DamageSourceType.Environment;
     #endregion
     
     #region Properties - 외부 접근용
@@ -234,6 +238,19 @@ public partial class MonsterController : EntityController
     {
         base.OnDamaged(damageAmount, damageSource);
         
+        // ⭐ 용기 시스템용: 데미지 소스에서 SkillSlotType 추출
+        DamageSourceInfo damageInfo = DamageSourceInfo.FromDamageSource(damageSource);
+        if (damageInfo.skillSlotType.HasValue)
+        {
+            lastDamageSkillSlotType = damageInfo.skillSlotType.Value;
+            lastDamageSourceType = damageInfo.sourceType;
+            Debug.Log($"[MonsterController] {gameObject.name}가 {damageInfo.skillSlotType.Value} 스킬로 데미지 받음");
+        }
+        else
+        {
+            lastDamageSourceType = damageInfo.sourceType;
+        }
+        
         // 몬스터 피격 반응
         // TODO: 나중에 구현
         // PlayHitAnimation();
@@ -289,6 +306,19 @@ public partial class MonsterController : EntityController
         
         Debug.Log($"[MonsterController] {gameObject.name} OnMonsterDied.Invoke() 호출 직전");
         OnMonsterDied?.Invoke(this);
+        
+        // ⭐ 용기 시스템용: 사망 시 마지막 데미지를 준 스킬 타입 전달
+        if (lastDamageSkillSlotType.HasValue)
+        {
+            OnMonsterKilledBySkill?.Invoke(this, lastDamageSkillSlotType.Value, lastDamageSourceType);
+            Debug.Log($"[MonsterController] {gameObject.name}이 {lastDamageSkillSlotType.Value} 스킬로 처치됨 (소스 타입: {lastDamageSourceType})");
+        }
+        else
+        {
+            OnMonsterKilledBySkill?.Invoke(this, null, lastDamageSourceType);
+            Debug.Log($"[MonsterController] {gameObject.name}이 스킬이 아닌 방법으로 처치됨 (소스 타입: {lastDamageSourceType})");
+        }
+        
         Debug.Log($"[MonsterController] {gameObject.name} OnMonsterDied.Invoke() 호출 완료");
         
         // TODO: 죽음 애니메이션, 이펙트 등
@@ -307,7 +337,16 @@ public partial class MonsterController : EntityController
     }
 
     // 이벤트
+    /// <summary>
+    /// 몬스터 사망 이벤트 (기존)
+    /// </summary>
     public System.Action<MonsterController> OnMonsterDied;
+    
+    /// <summary>
+    /// 몬스터가 스킬로 처치되었을 때 발생하는 이벤트 (용기 시스템용)
+    /// 파라미터: (MonsterController, SkillSlotType?, DamageSourceType)
+    /// </summary>
+    public System.Action<MonsterController, SkillSlotType?, DamageSourceType> OnMonsterKilledBySkill;
     
     #endregion
     

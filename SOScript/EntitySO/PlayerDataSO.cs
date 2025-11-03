@@ -67,5 +67,94 @@ public class PlayerDataSO : EntityDataSO
     [Tooltip("확신 (Confidence) - 스킬 랭크 S")]
     public int confidenceStepRequirement = 500;
     
+    [Space(10)]
+    [Header("용기 획득 - 공격적 플레이")]
+    [Tooltip("스킬로 적 처치 시 기본 용기 획득량")]
+    public int killCourageGain = 15;
+    
+    [Tooltip("같은 스킬 연속 사용 시 용기 획득량 (페널티)")]
+    public int sameSkillKillCourageGain = 10;
+    
+    [Space(5)]
+    [Header("멀티킬 보너스 (동시 처치 수에 따른 보너스)")]
+    [Tooltip("2마리 동시 처치 보너스")]
+    public int multiKill2Bonus = 20;
+    
+    [Tooltip("3마리 동시 처치 보너스")]
+    public int multiKill3Bonus = 40;
+    
+    [Tooltip("4마리 동시 처치 보너스")]
+    public int multiKill4Bonus = 70;
+    
+    [Tooltip("5마리 이상 동시 처치 보너스")]
+    public int multiKill5Bonus = 120;
+    
+    [Space(5)]
+    [Header("스킬 연계 시스템 (서로 다른 스킬 연속 사용 보너스)")]
+    [Tooltip("2종 스킬 연계 보너스")]
+    public int combo2Bonus = 20;
+    
+    [Tooltip("3종 스킬 연계 보너스")]
+    public int combo3Bonus = 30;
+    
+    [Tooltip("4종 스킬 연계 보너스 (풀 체인)")]
+    public int combo4Bonus = 50;
+    
+    [Space(10)]
+    [Header("용기 획득 - 방어적 플레이")]
+    [Tooltip("완벽한 회피 시 용기 획득량 (근접 회피)")]
+    public int perfectDodgeCourageGain = 25;
+    
+    [Tooltip("무피해 유지 시 초당 용기 획득량 (10초 이상)")]
+    public float noDamageCourageGainPerSecond_10 = 5f;
+    
+    [Tooltip("무피해 유지 시 초당 용기 획득량 (20초 이상)")]
+    public float noDamageCourageGainPerSecond_20 = 10f;
+    
+    [Space(10)]
+    [Header("용기 감소 - 페널티")]
+    [Tooltip("탄막에 피격 시 용기 감소량")]
+    public int projectileHitCourageLoss = 40;
+    
+    [Tooltip("접촉 피격 시 용기 감소량")]
+    public int contactHitCourageLoss = 30;
+    
+    [Tooltip("전투 없음 페널티 (초당 감소량)")]
+    public float noCombatCourageLossPerSecond = 10f;
+    
+    [Space(5)]
+    [Header("연속 피격 보호 (컴백 메커니즘)")]
+    [Tooltip("10초 내 2번 피격 시 용기 감소량 (보호 적용)")]
+    public int consecutiveHit2CourageLoss = 30;
+    
+    [Tooltip("10초 내 3번 이상 피격 시 용기 감소량 (보호 적용)")]
+    public int consecutiveHit3PlusCourageLoss = 20;
+    
+    [Space(10)]
+    [Header("타이머 설정")]
+    [Tooltip("최근 처치 기록 유지 시간 (초)")]
+    public float killRecordDuration = 15f;
+    
+    [Tooltip("최근 스킬 사용 기록 유지 시간 (초)")]
+    public float skillUseRecordDuration = 3f;
+    
+    [Tooltip("멀티킬 판정 시간 (초)")]
+    public float multiKillJudgmentDuration = 3f;
+    
+    [Tooltip("전투 없음 판정 시간 (초)")]
+    public float noCombatJudgmentDuration = 5f;
+    
+    [Tooltip("연속 피격 판정 시간 (초)")]
+    public float consecutiveHitJudgmentDuration = 10f;
+    
+    [Tooltip("무피해 유지 판정 시간 - 10초 (초)")]
+    public float noDamageJudgmentDuration_10 = 10f;
+    
+    [Tooltip("무피해 유지 판정 시간 - 20초 (초)")]
+    public float noDamageJudgmentDuration_20 = 20f;
+    
+    [Tooltip("완벽한 회피 판정 시간 (초)")]
+    public float perfectDodgeJudgmentDuration = 0.3f;
+    
     #endregion
 }
