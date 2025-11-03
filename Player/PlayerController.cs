@@ -28,6 +28,10 @@ public class PlayerController : EntityController
 
 	[Header("애니메이션")]
 	[SerializeField] private Animator animator;
+	
+	[Header("비주얼")]
+	[Tooltip("플레이어 스프라이트 렌더러 (깜빡임 효과용)")]
+	[SerializeField] private SpriteRenderer spriteRenderer;
 
 	[Header("카메라 쉐이크 (피격)")]
 	[Tooltip("피격 데미지에 따라 쉐이크 강도를 계산하는 SO")]
@@ -83,6 +87,13 @@ public class PlayerController : EntityController
 
 	[Tooltip("현재 이동 방향 (8방향)")]
 	[SerializeField] private MoveDirection currentMoveDirection = MoveDirection.None;
+
+	#endregion
+	
+	#region 런타임 상태 - 피격 무적
+	
+	// 깜빡임 효과 코루틴 참조
+	private Coroutine blinkCoroutine;
 
 	#endregion
 
@@ -142,6 +153,12 @@ public class PlayerController : EntityController
 		{
 			entityData = playerData;
 		}
+		
+		// SpriteRenderer 자동 할당
+		if (spriteRenderer == null)
+		{
+			spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+		}
 	}
 
 	protected override void Awake()
@@ -170,6 +187,11 @@ public class PlayerController : EntityController
 		if (skillController == null)
 		{
 			skillController = GetComponent<SkillController>();
+		}
+		
+		if (spriteRenderer == null)
+		{
+			spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 		}
 
 		// Rigidbody2D 설정 (Dynamic + 즉시 반응)
@@ -732,6 +754,64 @@ public class PlayerController : EntityController
 		{
 			hitShake.ApplyShake(camShake, damageAmount);
 		}
+		
+		// ⭐ 피격 후 무적 시간 부여
+		if (playerData != null && playerData.hitInvincibilityDuration > 0f)
+		{
+			ApplyHitInvincibility();
+		}
+	}
+	
+	/// <summary>
+	/// 피격 무적 시간 적용 (무적 + 깜빡임 효과)
+	/// </summary>
+	private void ApplyHitInvincibility()
+	{
+		if (playerData == null) return;
+		
+		// 무적 시간 설정
+		SetInvincibleForDuration(playerData.hitInvincibilityDuration);
+		
+		// 깜빡임 효과 시작
+		if (playerData.useBlinkEffect && spriteRenderer != null)
+		{
+			// 기존 깜빡임 코루틴이 있으면 중지
+			if (blinkCoroutine != null)
+			{
+				StopCoroutine(blinkCoroutine);
+			}
+			
+			blinkCoroutine = StartCoroutine(BlinkEffect(playerData.hitInvincibilityDuration));
+		}
+	}
+	
+	/// <summary>
+	/// 스프라이트 깜빡임 효과 코루틴 (빨간색으로 변경)
+	/// </summary>
+	private System.Collections.IEnumerator BlinkEffect(float duration)
+	{
+		if (spriteRenderer == null || playerData == null) yield break;
+		
+		// 원래 색상 저장
+		Color originalColor = spriteRenderer.color;
+		
+		float elapsed = 0f;
+		bool isHitColor = false;
+		
+		while (elapsed < duration)
+		{
+			// 깜빡임 주기마다 색상 토글
+			yield return new WaitForSeconds(playerData.blinkInterval);
+			
+			isHitColor = !isHitColor;
+			spriteRenderer.color = isHitColor ? playerData.hitColor : originalColor;
+			
+			elapsed += playerData.blinkInterval;
+		}
+		
+		// 무적 시간 종료 - 원래 색상으로 복구
+		spriteRenderer.color = originalColor;
+		blinkCoroutine = null;
 	}
 	
 	/// <summary>
@@ -785,8 +865,56 @@ public class PlayerController : EntityController
 			animator.SetTrigger("Death");
 		}
 		
+		// ⭐ 사망 이펙트 생성
+		SpawnDeathEffect();
+		
 		// 플레이어 사망 이벤트 발생 (GameOverUI가 구독 중)
 		OnPlayerDied?.Invoke();
+	}
+	
+	/// <summary>
+	/// 플레이어 사망 이펙트 생성
+	/// </summary>
+	private void SpawnDeathEffect()
+	{
+		if (playerData == null) return;
+		
+		Vector3 deathPosition = transform.position;
+		
+		// 1. 사망 이펙트 프리팹 생성
+		if (playerData.deathEffectPrefab != null)
+		{
+			GameObject effectObj = Instantiate(playerData.deathEffectPrefab, deathPosition, Quaternion.identity);
+			
+			// 지속 시간 후 자동 삭제
+			Destroy(effectObj, playerData.deathEffectDuration);
+			
+			Debug.Log($"[PlayerController] 사망 이펙트 생성: {playerData.deathEffectPrefab.name}");
+		}
+		
+		// 2. 사망 사운드 재생
+		if (playerData.deathSound != null)
+		{
+			AudioSource audioSource = GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(playerData.deathSound);
+			
+			Debug.Log($"[PlayerController] 사망 사운드 재생: {playerData.deathSound.name}");
+		}
+		
+		// 3. 카메라 쉐이크
+		if (playerData.deathCameraShakeStrength > 0f && hitShake != null && camShake != null)
+		{
+			// 사망 시 강한 쉐이크 (데미지 배율 적용)
+			hitShake.ApplyShake(camShake, Mathf.RoundToInt(playerData.deathCameraShakeStrength * 10));
+			
+			Debug.Log($"[PlayerController] 사망 카메라 쉐이크: 강도 {playerData.deathCameraShakeStrength}");
+		}
 	}
 	
 	/// <summary>
