@@ -36,6 +36,17 @@ public class PlayerStatusUI : MonoBehaviour
 	
 	#endregion
 	
+	#region UI 컴포넌트 - 용기 시스템
+	
+	[Header("용기 시스템 UI")]
+	[Tooltip("용기 점수 텍스트")]
+	[SerializeField] private TextMeshProUGUI courageScoreText;
+	
+	[Tooltip("스킬 랭크 텍스트")]
+	[SerializeField] private TextMeshProUGUI rankText;
+	
+	#endregion
+	
 	#region 색상 설정
 	
 	[Header("체력바 색상")]
@@ -130,6 +141,9 @@ public class PlayerStatusUI : MonoBehaviour
 		
 		// 텍스트 깜빡임 효과
 		UpdateTextBlink(Time.deltaTime);
+		
+		// ⭐ 용기 시스템 UI 갱신
+		UpdateCourageUI();
 	}
 	
 	#endregion
@@ -152,6 +166,12 @@ public class PlayerStatusUI : MonoBehaviour
 		
 		if (mentalPowerText == null)
 			Debug.LogWarning("[PlayerStatusUI] 정신력 텍스트가 할당되지 않았습니다.");
+		
+		if (courageScoreText == null)
+			Debug.LogWarning("[PlayerStatusUI] 용기 점수 텍스트가 할당되지 않았습니다.");
+		
+		if (rankText == null)
+			Debug.LogWarning("[PlayerStatusUI] 랭크 텍스트가 할당되지 않았습니다.");
 		
 		// Fill Image 자동 할당 시도
 		if (healthFillImage == null && healthSlider != null)
@@ -209,6 +229,33 @@ public class PlayerStatusUI : MonoBehaviour
 			
 			// 정신력 갱신
 			OnMentalPowerChanged(PlayerController.Instance.CurrentMentalPower, PlayerController.Instance.MaxMentalPower);
+			
+			// ⭐ 용기 시스템 갱신
+			UpdateCourageUI();
+		}
+	}
+	
+	#endregion
+	
+	#region 용기 시스템 UI
+	
+	/// <summary>
+	/// 용기 시스템 UI 업데이트 (용기 점수, 랭크)
+	/// </summary>
+	private void UpdateCourageUI()
+	{
+		if (PlayerController.Instance == null) return;
+		
+		// 용기 점수 텍스트 업데이트
+		if (courageScoreText != null)
+		{
+			courageScoreText.text = $"courage score : {PlayerController.Instance.CourageScore}";
+		}
+		
+		// 랭크 텍스트 업데이트
+		if (rankText != null)
+		{
+			rankText.text = $"rank : {PlayerController.Instance.CurrentSkillRank}";
 		}
 	}
 	
