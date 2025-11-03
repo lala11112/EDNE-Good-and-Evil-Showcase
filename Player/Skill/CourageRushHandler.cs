@@ -280,6 +280,14 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		float elapsedTime = 0f;
 		Vector3 currentPos = startPos;
 		
+		// 대쉬 궤적 이펙트 생성
+		GameObject trail = null;
+		if (dashTrailPrefab != null)
+		{
+			trail = Instantiate(dashTrailPrefab, playerController.transform.position, Quaternion.identity);
+			trail.transform.SetParent(playerController.transform);
+		}
+		
 		while (elapsedTime < dashDuration)
 		{
 			elapsedTime += Time.deltaTime;
@@ -343,16 +351,23 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			playerController.SetInvincible(false);
 		}
 		
-		// 9. 물리 상태 복원
+		// 9. 대쉬 궤적 이펙트 정리
+		if (trail != null)
+		{
+			trail.transform.SetParent(null);
+			Destroy(trail, 2f);
+		}
+		
+		// 10. 물리 상태 복원
 		if (rb != null)
 		{
 			rb.linearVelocity = Vector2.zero; // 대쉬 후 속도 초기화
 		}
 		
-		// 10. 도착 지점 AOE 효과 (실제 도착한 위치에서 발동)
+		// 11. 도착 지점 AOE 효과 (실제 도착한 위치에서 발동)
 		ApplyAOEEffect(finalPosition, rank);
 		
-		// 11. 재사용 상태 업데이트
+		// 12. 재사용 상태 업데이트
 		if (isRechargeAvailable)
 		{
 			// 재사용 소모

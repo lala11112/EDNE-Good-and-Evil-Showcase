@@ -29,6 +29,23 @@ public partial class MonsterController : EntityController
     private RoomController roomController;  // 이 몬스터가 속한 방 컨트롤러
     #endregion
     
+    #region Hit Effect - 피격 효과
+    [Header("피격 효과 설정")]
+    [Tooltip("피격 시 변경될 색상")]
+    [SerializeField] private Color hitColor = Color.red;
+    
+    [Tooltip("피격 효과 지속 시간(초)")]
+    [SerializeField] private float hitEffectDuration = 0.3f;
+    
+    [Tooltip("깜빡임 효과 사용 여부")]
+    [SerializeField] private bool useBlinkEffect = true;
+    
+    [Tooltip("깜빡임 주기 (초) - 작을수록 빠르게 깜빡임")]
+    [SerializeField] private float blinkInterval = 0.1f;
+    
+    private Coroutine hitEffectCoroutine; // 피격 효과 코루틴 참조
+    #endregion
+    
     #region Runtime Variables - 런타임 상태
     private bool isMovementEnabled = true;
     private float movementLockTimer = 0f; // 이동 잠금 타이머
@@ -234,13 +251,64 @@ public partial class MonsterController : EntityController
     {
         base.OnDamaged(damageAmount, damageSource);
         
-        // 몬스터 피격 반응
-        // TODO: 나중에 구현
-        // PlayHitAnimation();
-        // PlayHitSound();
-        // ShowDamagePopup(damageAmount);
+        // 피격 애니메이션
+        if (animator != null)
+        {
+            animator.SetTrigger("OnDamage");
+        }
+        
+        // ⭐ 피격 깜빡임 효과
+        if (spriteRenderer != null)
+        {
+            // 기존 효과가 실행 중이면 중지
+            if (hitEffectCoroutine != null)
+            {
+                StopCoroutine(hitEffectCoroutine);
+            }
+            
+            hitEffectCoroutine = StartCoroutine(HitEffect());
+        }
         
         Debug.Log($"[MonsterController] {gameObject.name}가 {damageAmount} 데미지를 받음 (남은 HP: {currentHealth}/{MaxHealth})");
+    }
+    
+    /// <summary>
+    /// 피격 시 색상 변경 효과 (깜빡임)
+    /// </summary>
+    private System.Collections.IEnumerator HitEffect()
+    {
+        if (spriteRenderer == null) yield break;
+
+        // 원래 색상 저장
+        Color originalColor = spriteRenderer.color;
+
+        if (useBlinkEffect)
+        {
+            // 깜빡임 효과
+            float elapsed = 0f;
+            bool isHitColor = false;
+
+            while (elapsed < hitEffectDuration)
+            {
+                // 색상 토글
+                isHitColor = !isHitColor;
+                spriteRenderer.color = isHitColor ? hitColor : originalColor;
+
+                // 깜빡임 주기만큼 대기
+                yield return new WaitForSeconds(blinkInterval);
+                elapsed += blinkInterval;
+            }
+        }
+        else
+        {
+            // 단순 색상 변경 (기존 방식)
+            spriteRenderer.color = hitColor;
+            yield return new WaitForSeconds(hitEffectDuration);
+        }
+
+        // 원래 색상으로 복원
+        spriteRenderer.color = originalColor;
+        hitEffectCoroutine = null;
     }
     
     /// <summary>
