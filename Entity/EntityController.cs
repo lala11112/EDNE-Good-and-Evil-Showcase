@@ -291,6 +291,14 @@ public class EntityController : MonoBehaviour
 	}
 
 	/// <summary>
+	/// 체력 변경 이벤트를 자식 클래스에서 안전하게 호출하기 위한 헬퍼
+	/// </summary>
+	protected void NotifyHealthChanged()
+	{
+		OnHealthChanged?.Invoke(currentHealth, MaxHealth);
+	}
+
+	/// <summary>
 	/// 사망 처리
 	/// 생존 상태를 false로 변경하고 물리 정지합니다
 	/// </summary>
