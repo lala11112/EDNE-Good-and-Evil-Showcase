@@ -23,34 +23,71 @@ public class SplitOnDeathScript : MonoBehaviour, IEnemyDeathScript
         Vector3 center = deadEnemy != null ? deadEnemy.transform.position : transform.position;
         if (alignZToZero) center.z = 0f;
 
+        // 부모 몬스터의 RoomController 가져오기
+        RoomController roomController = null;
+        if (deadEnemy != null)
+        {
+            var deadMonsterController = deadEnemy.GetComponent<MonsterController>();
+            if (deadMonsterController != null)
+            {
+                roomController = deadMonsterController.GetRoomController();
+                Debug.Log($"[SplitOnDeathScript] 부모 몬스터 {deadEnemy.name}의 RoomController 찾음: {roomController?.name ?? "null"}");
+            }
+        }
+
         // 좌/우 스폰
-        SpawnOne(horizontalEnemyPrefab, center + Vector3.left * spawnDistance);
-        SpawnOne(horizontalEnemyPrefab, center + Vector3.right * spawnDistance);
+        SpawnOne(horizontalEnemyPrefab, center + Vector3.left * spawnDistance, roomController);
+        SpawnOne(horizontalEnemyPrefab, center + Vector3.right * spawnDistance, roomController);
 
         // 상/하 스폰
-        SpawnOne(verticalEnemyPrefab, center + Vector3.up * spawnDistance);
-        SpawnOne(verticalEnemyPrefab, center + Vector3.down * spawnDistance);
+        SpawnOne(verticalEnemyPrefab, center + Vector3.up * spawnDistance, roomController);
+        SpawnOne(verticalEnemyPrefab, center + Vector3.down * spawnDistance, roomController);
 
         // 작업 끝났으면 자신 정리 (이 프리팹은 로직 전용)
         Destroy(gameObject);
     }
 
-    private void SpawnOne(GameObject prefab, Vector3 position)
+    private void SpawnOne(GameObject prefab, Vector3 position, RoomController roomController)
     {
         if (prefab == null) return;
 
         if (alignZToZero) position.z = 0f;
         GameObject spawned = Instantiate(prefab, position, Quaternion.identity);
+        
+        Debug.Log($"[SplitOnDeathScript] 분열 몬스터 생성: {spawned.name} at {position}");
 
-        if (setTargetToPlayer && PlayerController.Instance != null)
+        var mc = spawned.GetComponent<MonsterController>();
+        if (mc != null)
         {
-            var mc = spawned.GetComponent<MonsterController>();
-            if (mc != null)
+            // ⭐ RoomController 설정 및 등록 (중요!)
+            if (roomController != null)
+            {
+                // RoomController 설정
+                mc.SetRoomController(roomController);
+                
+                // RoomController에 등록
+                roomController.RegisterMonster(mc);
+                
+                // ⭐ 몬스터 죽음 이벤트 구독 (중요!)
+                mc.OnMonsterDied += roomController.UnregisterMonster;
+                Debug.Log($"[SplitOnDeathScript] 분열 몬스터 {mc.name} 등록 완료 (구독자 수: {mc.OnMonsterDied?.GetInvocationList()?.Length ?? 0}, 현재 총 몬스터 수: {roomController.GetCurrentMonsterCount()}마리)");
+            }
+            else
+            {
+                Debug.LogWarning($"[SplitOnDeathScript] RoomController가 없어서 {mc.name}을 등록할 수 없습니다!");
+            }
+            
+            // 플레이어 타겟 설정
+            if (setTargetToPlayer && PlayerController.Instance != null)
             {
                 // MonsterController는 Start에서 자동 타겟 찾도록 설계되어 있을 수 있으나, 바로 지정하면 반응이 더 빠름
                 // 안전하게 Transform만 설정 (노출된 API가 없다면 직접 필드 접근은 하지 않음)
                 // Target 설정용 공개 메서드가 없다면, Start에서 autoFindPlayer에 의존하도록 둡니다.
             }
+        }
+        else
+        {
+            Debug.LogWarning($"[SplitOnDeathScript] {spawned.name}에 MonsterController가 없습니다!");
         }
     }
 

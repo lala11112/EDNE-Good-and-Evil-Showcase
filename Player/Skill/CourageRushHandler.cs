@@ -115,6 +115,13 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("재사용 가능 표시 이펙트")]
 	[SerializeField] private GameObject rechargeReadyEffectPrefab;
 	
+	[Header("사운드 이펙트")]
+	[Tooltip("대쉬 시작 효과음")]
+	[SerializeField] private AudioClip dashStartSound;
+	
+	[Tooltip("AOE 착지 효과음")]
+	[SerializeField] private AudioClip aoeImpactSound;
+	
 	#endregion
 	
 	#region SkillHandlerInterface 구현
@@ -183,7 +190,10 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private IEnumerator ExecuteDash(SkillRank rank)
 	{
-		// 0. Rigidbody2D 가져오기 및 물리 상태 초기화
+		// 0. 대쉬 시작 효과음 재생
+		PlayDashStartSound();
+		
+		// 1. Rigidbody2D 가져오기 및 물리 상태 초기화
 		Rigidbody2D rb = playerController.GetComponent<Rigidbody2D>();
 		Vector2 originalVelocity = Vector2.zero;
 		
@@ -376,6 +386,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ApplyAOEEffect(Vector3 position, SkillRank rank)
 	{
+		// 0. AOE 착지 효과음 재생
+		PlayAOEImpactSound();
+		
 		// 1. 데미지 계산
 		float damage = CalculateDamage(rank);
 		
@@ -546,6 +559,48 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// S랭크 정신력 감소율 (다른 스킬용)
 	/// </summary>
 	public float GetSRankMentalCostReduction() => isInSRankMode ? sRankMentalCostReduction : 1f;
+	
+	#endregion
+	
+	#region 사운드 재생
+	
+	/// <summary>
+	/// 대쉬 시작 효과음 재생
+	/// </summary>
+	private void PlayDashStartSound()
+	{
+		if (dashStartSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(dashStartSound);
+			Debug.Log("[CourageRushHandler] 대쉬 시작 효과음 재생");
+		}
+	}
+	
+	/// <summary>
+	/// AOE 착지 효과음 재생
+	/// </summary>
+	private void PlayAOEImpactSound()
+	{
+		if (aoeImpactSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(aoeImpactSound);
+			Debug.Log("[CourageRushHandler] AOE 착지 효과음 재생");
+		}
+	}
 	
 	#endregion
 }

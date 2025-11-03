@@ -86,6 +86,22 @@ public class PlayerController : EntityController
 
 	#endregion
 
+	#region 이벤트
+
+	/// <summary>
+	/// 플레이어 사망 이벤트
+	/// 게임 오버 UI 등에서 구독하여 사용합니다.
+	/// </summary>
+	public static event System.Action OnPlayerDied;
+	
+	/// <summary>
+	/// 플레이어 부활 이벤트
+	/// 게임 오버 UI에서 "계속하기" 버튼 클릭 시 사용합니다.
+	/// </summary>
+	public static event System.Action OnPlayerRevived;
+
+	#endregion
+
 	#region 프로퍼티 (읽기 전용)
 
 	/// <summary>현재 정신력</summary>
@@ -749,17 +765,67 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnPlayerDeath()
 	{
-		// 나중에 구현:
-		// - 사망 애니메이션
-		// - 게임오버 UI
-		// - 리스폰 또는 씬 전환
-		// - 데이터 저장
+		Debug.Log("[PlayerController] 플레이어 사망 이벤트 발생");
 		
 		// 입력 비활성화
 		if (inputActions != null)
 		{
 			inputActions.Disable();
 		}
+		
+		// 이동 정지
+		if (rb != null)
+		{
+			rb.linearVelocity = Vector2.zero;
+		}
+		
+		// 사망 애니메이션 재생
+		if (animator != null)
+		{
+			animator.SetTrigger("Death");
+		}
+		
+		// 플레이어 사망 이벤트 발생 (GameOverUI가 구독 중)
+		OnPlayerDied?.Invoke();
+	}
+	
+	/// <summary>
+	/// 플레이어 부활
+	/// 게임 오버 UI의 "계속하기" 버튼에서 호출합니다.
+	/// </summary>
+	public void Revive()
+	{
+		Debug.Log("[PlayerController] 플레이어 부활");
+		
+		// 체력 완전 회복 (최대로 설정)
+		currentHealth = MaxHealth;
+		
+		// 정신력 완전 회복 (최대로 설정)
+		currentMentalPower = maxMentalPower;
+		
+		// 생존 상태로 변경
+		isAlive = true;
+		
+		// 입력 활성화
+		if (inputActions != null)
+		{
+			inputActions.Enable();
+		}
+		
+		// 애니메이터 리셋
+		if (animator != null)
+		{
+			animator.SetTrigger("Revive");
+		}
+		
+		// 부활 이벤트 발생
+		OnPlayerRevived?.Invoke();
+		
+		// UI 업데이트 (최대 체력/정신력으로 업데이트)
+		PlayerStatusEvents.InvokeHealthChanged(currentHealth, MaxHealth);
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+		
+		Debug.Log($"[PlayerController] 부활 완료 - 체력: {currentHealth}/{MaxHealth}, 정신력: {currentMentalPower}/{maxMentalPower}");
 	}
 
 	#endregion

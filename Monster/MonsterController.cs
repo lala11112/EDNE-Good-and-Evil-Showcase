@@ -271,7 +271,21 @@ public partial class MonsterController : EntityController
         
         // 죽음 이벤트 발생
         Debug.Log($"[MonsterController] {gameObject.name} 죽음 이벤트 발생 - 구독자 수: {(OnMonsterDied?.GetInvocationList()?.Length ?? 0)}");
+        
+        // 구독자 목록 출력
+        if (OnMonsterDied != null)
+        {
+            var delegates = OnMonsterDied.GetInvocationList();
+            Debug.Log($"[MonsterController] {gameObject.name} 이벤트 구독자 목록:");
+            for (int i = 0; i < delegates.Length; i++)
+            {
+                Debug.Log($"  {i + 1}. {delegates[i].Method.Name} (타겟: {delegates[i].Target})");
+            }
+        }
+        
+        Debug.Log($"[MonsterController] {gameObject.name} OnMonsterDied.Invoke() 호출 직전");
         OnMonsterDied?.Invoke(this);
+        Debug.Log($"[MonsterController] {gameObject.name} OnMonsterDied.Invoke() 호출 완료");
         
         // TODO: 죽음 애니메이션, 이펙트 등
         // PlayDeathAnimation();

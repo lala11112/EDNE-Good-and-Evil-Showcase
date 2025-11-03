@@ -41,6 +41,9 @@ public class RoomController : MonoBehaviour
     // 웨이브 관련 변수
     private bool isWaveInProgress = false;
     
+    // 스포너 관리 변수
+    private MonsterSpawner lastUsedSpawner = null; // 가장 최근에 사용한 스포너 (이펙트 충돌 방지용)
+    
     // 디버그 관련 변수
     private float debugTimer = 0f;
     private const float DEBUG_INTERVAL = 10f; // 10초마다
@@ -212,20 +215,29 @@ public class RoomController : MonoBehaviour
     /// </summary>
     private IEnumerator SpawnWaveMonsters(WaveData waveData)
     {
+        // 웨이브 시작 시 lastUsedSpawner 초기화
+        lastUsedSpawner = null;
+        
         foreach (var monsterData in waveData.monsterSpawnData)
         {
-            // 스포너 선택
-            MonsterSpawner selectedSpawner = SelectSpawner(monsterData);
-            if (selectedSpawner == null)
-            {
-                Debug.LogWarning($"[RoomController] 사용 가능한 스포너가 없습니다.");
-                continue;
-            }
-
-            // 몬스터 스폰 해당 기능은 몬스터 스폰카운트가 많아도 적용되지않을텐데 이부분 나중에 수정할예정입니다.
+            // 몬스터 수만큼 스폰 (각 스폰마다 스포너를 새로 선택)
             for (int i = 0; i < monsterData.spawnCount; i++)
             {
+                // 스포너 선택 (최근 사용한 스포너 피하기)
+                MonsterSpawner selectedSpawner = SelectSpawner(monsterData);
+                if (selectedSpawner == null)
+                {
+                    Debug.LogWarning($"[RoomController] 사용 가능한 스포너가 없습니다.");
+                    continue;
+                }
+
+                // 몬스터 스폰
                 selectedSpawner.StartSpawning(monsterData, roomData.spawnWarningTime);
+                
+                // 최근 사용한 스포너 기록 (다음 스폰 시 이 스포너를 피함)
+                lastUsedSpawner = selectedSpawner;
+                Debug.Log($"[RoomController] 스포너 '{selectedSpawner.spawnerName}' 사용 (다음 스폰 시 회피 대상)");
+                
                 yield return new WaitForSeconds(waveData.spawnInterval);
             }
         }
@@ -255,11 +267,43 @@ public class RoomController : MonoBehaviour
         }
         else
         {
-            // 활성화된 스포너 중 랜덤 선택
-            List<MonsterSpawner> activeSpawners = new List<MonsterSpawner>();
+            // 우선순위 1: 스폰 중이 아니고, 최근 사용하지 않은 활성 스포너 선택 (이펙트 충돌 방지)
+            List<MonsterSpawner> preferredSpawners = new List<MonsterSpawner>();
+            foreach (var spawner in monsterSpawners)
+            {
+                if (spawner.isActive && !spawner.IsSpawning() && spawner != lastUsedSpawner)
+                {
+                    preferredSpawners.Add(spawner);
+                }
+            }
+
+            if (preferredSpawners.Count > 0)
+            {
+                Debug.Log($"[RoomController] 최적 스포너 {preferredSpawners.Count}개 발견 (스폰 중 아님 + 최근 사용 안 함)");
+                return preferredSpawners[Random.Range(0, preferredSpawners.Count)];
+            }
+            
+            // 우선순위 2: 스폰 중이 아닌 활성 스포너 선택 (최근 사용한 스포너 포함 가능)
+            List<MonsterSpawner> availableSpawners = new List<MonsterSpawner>();
             foreach (var spawner in monsterSpawners)
             {
                 if (spawner.isActive && !spawner.IsSpawning())
+                {
+                    availableSpawners.Add(spawner);
+                }
+            }
+
+            if (availableSpawners.Count > 0)
+            {
+                Debug.Log($"[RoomController] 사용 가능한 스포너 {availableSpawners.Count}개 발견 (스폰 중 아님)");
+                return availableSpawners[Random.Range(0, availableSpawners.Count)];
+            }
+            
+            // 우선순위 3: 모든 스포너가 사용 중이면 활성 스포너 중 아무거나 선택 (Fallback)
+            List<MonsterSpawner> activeSpawners = new List<MonsterSpawner>();
+            foreach (var spawner in monsterSpawners)
+            {
+                if (spawner.isActive)
                 {
                     activeSpawners.Add(spawner);
                 }
@@ -267,10 +311,12 @@ public class RoomController : MonoBehaviour
 
             if (activeSpawners.Count > 0)
             {
+                Debug.LogWarning($"[RoomController] 모든 스포너가 사용 중이므로 활성 스포너 중 임의로 선택합니다.");
                 return activeSpawners[Random.Range(0, activeSpawners.Count)];
             }
         }
 
+        Debug.LogError($"[RoomController] 사용 가능한 스포너가 전혀 없습니다!");
         return null;
     }
 
@@ -558,5 +604,14 @@ public class RoomController : MonoBehaviour
         {
             Debug.Log($"[RoomController] 등록된 몬스터가 없습니다.");
         }
+    }
+
+    /// <summary>
+    /// 방 데이터(SO) 가져오기
+    /// MonsterSpawner에서 사운드 및 이펙트 재생 시 사용
+    /// </summary>
+    public RoomControllerSO GetRoomData()
+    {
+        return roomData;
     }
 }

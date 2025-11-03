@@ -219,24 +219,32 @@ public class EnemyDeathEventSystem : MonoBehaviour
     {
         try
         {
+            Debug.Log($"[EnemyDeathEventSystem] 프리팹 실행 시작 - {prefab.name} at {position}");
+            
             // 프리팹을 지정된 위치에 인스턴스화
             GameObject instance = Instantiate(prefab, position, Quaternion.identity);
+            Debug.Log($"[EnemyDeathEventSystem] 인스턴스 생성 완료 - {instance.name}");
             
             // IEnemyDeathScript를 구현한 모든 컴포넌트 찾아서 실행
             IEnemyDeathScript[] deathScripts = instance.GetComponentsInChildren<IEnemyDeathScript>();
+            Debug.Log($"[EnemyDeathEventSystem] IEnemyDeathScript 컴포넌트 {deathScripts.Length}개 발견");
+            
             foreach (var deathScript in deathScripts)
             {
+                Debug.Log($"[EnemyDeathEventSystem] IEnemyDeathScript 실행: {deathScript.GetType().Name}");
                 deathScript.OnEnemyDeath(gameObject);
             }
             
             // 분열 몬스터 처리: 생성된 몬스터를 RoomController에 자동 등록
+            Debug.Log($"[EnemyDeathEventSystem] RegisterSpawnedMonsters 호출 전");
             RegisterSpawnedMonsters(instance);
+            Debug.Log($"[EnemyDeathEventSystem] RegisterSpawnedMonsters 호출 후");
             
             Debug.Log($"[EnemyDeathEventSystem] {prefab.name} 프리팹이 {position} 위치에서 실행되었습니다.");
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"[EnemyDeathEventSystem] {prefab.name} 프리팹 실행 중 오류 발생: {e.Message}");
+            Debug.LogError($"[EnemyDeathEventSystem] {prefab.name} 프리팹 실행 중 오류 발생: {e.Message}\n{e.StackTrace}");
         }
     }
     
@@ -246,8 +254,14 @@ public class EnemyDeathEventSystem : MonoBehaviour
     /// </summary>
     private void RegisterSpawnedMonsters(GameObject spawnedObject)
     {
+        Debug.Log($"[EnemyDeathEventSystem] RegisterSpawnedMonsters 호출됨 - 스폰된 오브젝트: {spawnedObject?.name ?? "null"}");
+        
         // 부모 몬스터의 RoomController 가져오기
-        if (monsterController == null) return;
+        if (monsterController == null)
+        {
+            Debug.LogWarning($"[EnemyDeathEventSystem] monsterController가 null입니다!");
+            return;
+        }
         
         RoomController roomController = monsterController.GetRoomController();
         if (roomController == null)
@@ -256,8 +270,12 @@ public class EnemyDeathEventSystem : MonoBehaviour
             return;
         }
         
+        Debug.Log($"[EnemyDeathEventSystem] RoomController 찾음: {roomController.name}");
+        
         // 생성된 오브젝트와 자식들에서 MonsterController 찾기
         MonsterController[] spawnedMonsters = spawnedObject.GetComponentsInChildren<MonsterController>();
+        
+        Debug.Log($"[EnemyDeathEventSystem] 분열 몬스터 {spawnedMonsters.Length}마리 발견 (오브젝트: {spawnedObject.name})");
         
         foreach (var spawnedMonster in spawnedMonsters)
         {
@@ -269,7 +287,11 @@ public class EnemyDeathEventSystem : MonoBehaviour
                 // RoomController에 등록
                 roomController.RegisterMonster(spawnedMonster);
                 
-                Debug.Log($"[EnemyDeathEventSystem] 분열 몬스터 {spawnedMonster.name}를 RoomController에 등록했습니다.");
+                // ⭐ 몬스터 죽음 이벤트 구독 (중요!)
+                spawnedMonster.OnMonsterDied += roomController.UnregisterMonster;
+                Debug.Log($"[EnemyDeathEventSystem] 분열 몬스터 {spawnedMonster.name}의 죽음 이벤트 구독 완료 (구독자 수: {spawnedMonster.OnMonsterDied?.GetInvocationList()?.Length ?? 0})");
+                
+                Debug.Log($"[EnemyDeathEventSystem] 분열 몬스터 {spawnedMonster.name}를 RoomController에 등록했습니다. 현재 총 몬스터 수: {roomController.GetCurrentMonsterCount()}마리");
             }
         }
     }

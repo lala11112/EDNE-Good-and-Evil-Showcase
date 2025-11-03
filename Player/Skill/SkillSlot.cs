@@ -148,8 +148,10 @@ public class SkillSlot : MonoBehaviour
         bool isFaithDash = (faithDashHandler != null);
         bool isFaithDashRecharging = (isFaithDash && faithDashHandler.IsInRechargeMode);
         
-        // 쿨타임 체크 (FaithDash는 재사용 모드 종료 후에만 쿨타임 적용)
-        if (isOnCooldown)
+        Debug.Log($"[SkillSlot] ExecuteSkill - isFaithDash: {isFaithDash}, isRecharging: {isFaithDashRecharging}, isOnCooldown: {isOnCooldown}");
+        
+        // 쿨타임 체크 (FaithDash 재사용 모드일 때는 쿨타임 무시)
+        if (isOnCooldown && !isFaithDashRecharging)
         {
             SkillUIEvents.InvokeSkillUseFailed(slotType, $"쿨타임 ({currentCooldown:F1}초)");
             Debug.Log($"{currentSkillData.skillName} 스킬이 쿨타임 중입니다! ({currentCooldown:F1}초 남음)");
@@ -161,10 +163,14 @@ public class SkillSlot : MonoBehaviour
         
         handler.Use(rank);
         
-        // 쿨타임 시작 (FaithDash는 재사용 모드 종료 시 시작하므로 여기서는 시작 안 함)
+        // ⭐ 쿨타임 시작 - FaithDash는 절대 여기서 쿨타임 시작 안 함 (재사용 모드 종료 시 시작)
         if (!isFaithDash)
         {
             StartCooldown();
+        }
+        else
+        {
+            Debug.Log($"[SkillSlot] {currentSkillData.skillName} - FaithDash 스킬이므로 쿨타임 시작 안 함");
         }
     }
     
