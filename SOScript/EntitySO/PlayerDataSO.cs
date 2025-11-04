@@ -48,24 +48,24 @@ public class PlayerDataSO : EntityDataSO
     
     
     [Space(10)]
-    [Header("용기 단계별 요구 점수")]
-    [Tooltip("절망 (Despair) - 게임오버 상태")]
+    [Header("용기 단계별 요구 점수 (누적 용기)")]
+    [Tooltip("절망 (Despair) - 게임오버 상태, 스킬 랭크 D")]
     public int despairStepRequirement = 0;
     
     [Tooltip("불안 (Anxiety) - 스킬 랭크 D")]
-    public int anxietyStepRequirement = 1;
+    public int anxietyStepRequirement = 0;
     
-    [Tooltip("의심 (Doubt) - 스킬 랭크 C (기본 시작 단계)")]
-    public int doubtStepRequirement = 200;
+    [Tooltip("의심 (Doubt) - 스킬 랭크 C")]
+    public int doubtStepRequirement = 100;
     
     [Tooltip("용기 (Courage) - 스킬 랭크 B")]
-    public int courageStepRequirement = 300;
+    public int courageStepRequirement = 250;
     
     [Tooltip("결의 (Determination) - 스킬 랭크 A")]
-    public int determinationStepRequirement = 400;
+    public int determinationStepRequirement = 450;
     
     [Tooltip("확신 (Confidence) - 스킬 랭크 S")]
-    public int confidenceStepRequirement = 500;
+    public int confidenceStepRequirement = 700;
     
     [Space(10)]
     [Header("용기 획득 - 공격적 플레이")]
@@ -119,6 +119,9 @@ public class PlayerDataSO : EntityDataSO
     [Tooltip("접촉 피격 시 용기 감소량")]
     public int contactHitCourageLoss = 30;
     
+    [Tooltip("환경 데미지(트랩 등) 피격 시 용기 감소량")]
+    public int environmentHitCourageLoss = 25;
+    
     [Tooltip("전투 없음 페널티 (초당 감소량)")]
     public float noCombatCourageLossPerSecond = 10f;
     
@@ -135,8 +138,8 @@ public class PlayerDataSO : EntityDataSO
     [Tooltip("최근 처치 기록 유지 시간 (초)")]
     public float killRecordDuration = 15f;
     
-    [Tooltip("최근 스킬 사용 기록 유지 시간 (초)")]
-    public float skillUseRecordDuration = 3f;
+    [Tooltip("최근 스킬 사용 기록 유지 시간 (초) - 스킬 연계 판정용")]
+    public float skillUseRecordDuration = 5f;
     
     [Tooltip("멀티킬 판정 시간 (초)")]
     public float multiKillJudgmentDuration = 3f;

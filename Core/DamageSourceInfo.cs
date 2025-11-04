@@ -82,7 +82,8 @@ public class DamageSourceInfo
             }
 
             // 4. 트랩/환경 오브젝트 확인 (TrapBase 등)
-            if (monoSource is TrapBase || monoSource.CompareTag("Trap") || monoSource.CompareTag("Environment"))
+            // TrapBase를 상속받은 경우 자동으로 환경 데미지로 처리
+            if (monoSource is TrapBase)
             {
                 return FromOther(damageSource, DamageSourceType.Environment);
             }

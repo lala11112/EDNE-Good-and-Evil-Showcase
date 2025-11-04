@@ -24,7 +24,7 @@ public class KillRecord
 }
 
 /// <summary>
-/// 스킬 사용 기록 (3초간 유지)
+/// 스킬 사용 기록 (5초간 유지 - 스킬 연계 판정용)
 /// </summary>
 [System.Serializable]
 public class SkillUseRecord

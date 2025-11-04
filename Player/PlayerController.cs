@@ -534,6 +534,14 @@ public class PlayerController : EntityController
 
 		courageScore += amount;
 
+		// 용기 점수 범위 체크 (최소값: 0 이하 가능, 최대값: 제한 없음)
+		// 최소값은 Despair 상태를 허용하기 위해 제한하지 않음
+		// 음수도 가능하도록 하되, 너무 낮아지면 로그 출력 (선택사항)
+		if (courageScore < -1000)
+		{
+			Debug.LogWarning($"[PlayerController] 용기 점수가 매우 낮습니다: {courageScore} (최소값 제한 없음)");
+		}
+
 		// 용기 단계 재계산
 		UpdateCourageState();
 
@@ -556,9 +564,20 @@ public class PlayerController : EntityController
 	/// <summary>
 	/// 용기 점수 직접 설정
 	/// </summary>
+	/// <param name="score">설정할 용기 점수</param>
 	public void SetCourageScore(int score)
 	{
+		int previousScore = courageScore;
 		courageScore = score;
+
+		// 용기 점수 범위 체크 (최소값: 0 이하 가능, 최대값: 제한 없음)
+		// 최소값은 Despair 상태를 허용하기 위해 제한하지 않음
+		// 음수도 가능하도록 하되, 너무 낮아지면 로그 출력 (선택사항)
+		if (courageScore < -1000)
+		{
+			Debug.LogWarning($"[PlayerController] 용기 점수가 매우 낮습니다: {courageScore} (최소값 제한 없음)");
+		}
+
 		UpdateCourageState();
 		CheckDespairState();
 	}
@@ -575,15 +594,15 @@ public class PlayerController : EntityController
 
 		// 점수에 따라 단계 결정 (높은 단계부터 체크)
 		if (courageScore >= playerData.confidenceStepRequirement)
-			newState = CourageState.confidence;
+			newState = CourageState.Confidence;
 		else if (courageScore >= playerData.determinationStepRequirement)
-			newState = CourageState.determination;
+			newState = CourageState.Determination;
 		else if (courageScore >= playerData.courageStepRequirement)
-			newState = CourageState.courage;
+			newState = CourageState.Courage;
 		else if (courageScore >= playerData.doubtStepRequirement)
-			newState = CourageState.doubt;
+			newState = CourageState.Doubt;
 		else if (courageScore >= playerData.anxietyStepRequirement)
-			newState = CourageState.anxiety;
+			newState = CourageState.Anxiety;
 		else
 			newState = CourageState.Despair;
 
@@ -610,15 +629,15 @@ public class PlayerController : EntityController
 		{
 			case CourageState.Despair:
 				return SkillRank.D; // 절망 상태에서는 최하 랭크
-			case CourageState.anxiety:
+			case CourageState.Anxiety:
 				return SkillRank.D;
-			case CourageState.doubt:
+			case CourageState.Doubt:
 				return SkillRank.C;
-			case CourageState.courage:
+			case CourageState.Courage:
 				return SkillRank.B;
-			case CourageState.determination:
+			case CourageState.Determination:
 				return SkillRank.A;
-			case CourageState.confidence:
+			case CourageState.Confidence:
 				return SkillRank.S;
 			default:
 				return SkillRank.D;
@@ -795,8 +814,8 @@ public class PlayerController : EntityController
 		// 최근 처치 기록 추가 (15초 유지)
 		recentKillRecords.Add(new KillRecord(currentTime, usedSkill));
 
-		// 멀티킬 판정 (3초 이내 동시 처치 체크)
-		int multiKillCount = GetRecentKillCountInDuration(currentTime, playerData.multiKillJudgmentDuration, usedSkill);
+		// 멀티킬 판정 (3초 이내 동시 처치 체크 - 스킬 필터링 없이 모든 처치 수집)
+		int multiKillCount = GetRecentKillCountInDuration(currentTime, playerData.multiKillJudgmentDuration);
 		
 		// 멀티킬 기록 추가
 		recentMultiKillRecords.Add(new MultiKillRecord(currentTime, multiKillCount, usedSkill));
@@ -809,6 +828,13 @@ public class PlayerController : EntityController
 		
 		// 스킬 연계 보너스 계산
 		int comboBonus = CalculateSkillComboBonus(usedSkill);
+		
+		// 4종 콤보(풀 체인) 완성 시 스킬 사용 기록 초기화
+		if (comboBonus == playerData.combo4Bonus)
+		{
+			recentSkillUseRecords.Clear();
+			Debug.Log("[PlayerController] ⭐ 4종 풀 체인 완성! 스킬 사용 기록 초기화");
+		}
 
 		// 총 용기 획득량
 		int totalCourageGain = baseCourageGain + multiKillBonus + comboBonus;
@@ -832,7 +858,7 @@ public class PlayerController : EntityController
 	{
 		if (playerData == null) return 0;
 
-		// 가장 최근 처치 스킬 확인
+		// 1. 가장 최근에 죽인 스킬과 현재 스킬 비교
 		if (recentKillRecords.Count > 0)
 		{
 			SkillSlotType? lastKillSkill = recentKillRecords[recentKillRecords.Count - 1].skillSlotType;
@@ -840,11 +866,11 @@ public class PlayerController : EntityController
 			// 같은 스킬 연속 사용 체크
 			if (lastKillSkill.HasValue && lastKillSkill.Value == currentSkill)
 			{
-				return playerData.sameSkillKillCourageGain; // 페널티
+				return playerData.sameSkillKillCourageGain; // 페널티: +10
 			}
 		}
 
-		// 최근 15초 기록 중 반 이상이 현재 스킬인지 체크
+		// 2. 15초 배열에서 3개 이상이면서 반 이상이 현재 스킬인지 체크
 		if (recentKillRecords.Count >= 3)
 		{
 			int sameSkillCount = 0;
@@ -856,25 +882,28 @@ public class PlayerController : EntityController
 				}
 			}
 
+			// 반 이상이 같은 스킬이면 페널티
 			if (sameSkillCount > recentKillRecords.Count / 2)
 			{
-				return playerData.sameSkillKillCourageGain; // 페널티 (단조로움)
+				return playerData.sameSkillKillCourageGain; // 페널티: +10
 			}
 		}
 
-		// 정상 용기 획득
-		return playerData.killCourageGain;
+		// 3. 정상 용기 획득 (다양한 스킬 사용)
+		return playerData.killCourageGain; // 정상: +15
 	}
 
 	/// <summary>
 	/// 최근 일정 시간 내 처치 수 계산 (멀티킬 판정용)
+	/// 스킬 타입 필터링 없이 모든 처치를 카운트 (동시 처치 판정)
 	/// </summary>
-	private int GetRecentKillCountInDuration(float currentTime, float duration, SkillSlotType skillType)
+	private int GetRecentKillCountInDuration(float currentTime, float duration)
 	{
 		int count = 0;
 		foreach (var record in recentKillRecords)
 		{
-			if (currentTime - record.time <= duration && record.skillSlotType == skillType)
+			// 3초 이내 모든 처치 카운트 (스킬 타입 무관)
+			if (currentTime - record.time <= duration)
 			{
 				count++;
 			}
@@ -901,19 +930,20 @@ public class PlayerController : EntityController
 
 	/// <summary>
 	/// 스킬 연계 보너스 계산
+	/// 5초 이내 사용한 서로 다른 스킬 수에 따라 보너스 제공
 	/// </summary>
 	private int CalculateSkillComboBonus(SkillSlotType currentSkill)
 	{
 		if (playerData == null) return 0;
 
-		// 최근 3초 이내 사용한 서로 다른 스킬 수 계산
+		// 최근 5초 이내 사용한 서로 다른 스킬 수 계산
 		float currentTime = Time.time;
 		HashSet<SkillSlotType> uniqueSkills = new HashSet<SkillSlotType>();
 		
 		// 현재 스킬 포함
 		uniqueSkills.Add(currentSkill);
 
-		// 최근 사용 기록에서 다른 스킬 추가
+		// 최근 사용 기록에서 다른 스킬 추가 (5초 이내)
 		foreach (var record in recentSkillUseRecords)
 		{
 			if (currentTime - record.time <= playerData.skillUseRecordDuration)
@@ -943,7 +973,7 @@ public class PlayerController : EntityController
 
 		float currentTime = Time.time;
 		
-		// 최근 사용 기록 추가 (3초 유지)
+		// 최근 사용 기록 추가 (5초 유지 - 스킬 연계 판정용)
 		recentSkillUseRecords.Add(new SkillUseRecord(currentTime, skillType));
 
 		// 전투 행동 시간 업데이트
@@ -1003,8 +1033,11 @@ public class PlayerController : EntityController
 			case DamageSourceType.Contact:
 				baseLoss = playerData.contactHitCourageLoss;
 				break;
+			case DamageSourceType.Environment:
+				baseLoss = playerData.environmentHitCourageLoss;
+				break;
 			default:
-				baseLoss = playerData.projectileHitCourageLoss; // 기본값
+				baseLoss = playerData.projectileHitCourageLoss; // 기본값 (예상치 못한 타입)
 				break;
 		}
 
