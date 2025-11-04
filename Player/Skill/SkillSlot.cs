@@ -235,10 +235,21 @@ public class SkillSlot : MonoBehaviour
         // ⭐ 랭크 시스템 디버그: 현재 랭크 출력
         Debug.Log($"[SkillSlot] {currentSkillData.skillName} 스킬 사용 - 랭크: {rank} (용기 단계: {playerController?.CurrentCourageState}, 용기 점수: {playerController?.CourageScore})");
         
+        // ⭐ S랭크 궁극기 시스템: S랭크일 때 스킬 사용 시 궁극기로 처리
+        bool isUltimateSkill = (rank == SkillRank.S);
+        
+        // 궁극기 실행 (handler.Use(rank) 호출)
         handler.Use(rank);
         
+        // 궁극기 사용 후 처리 (S랭크일 때만)
+        if (isUltimateSkill && playerController != null)
+        {
+            playerController.OnUltimateSkillUsed();
+        }
+        
         // ⭐ 용기 시스템: 스킬 사용 기록 추가 (스킬 연계 판정용)
-        if (playerController != null)
+        // 궁극기는 스킬 연계 판정에서 제외 (궁극기 사용 후 랭크가 D로 떨어지므로)
+        if (playerController != null && !isUltimateSkill)
         {
             playerController.OnSkillUsed(slotType);
         }

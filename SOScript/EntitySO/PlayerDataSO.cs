@@ -176,5 +176,16 @@ public class PlayerDataSO : EntityDataSO
     [Tooltip("전투 종료 판정 시간 (초) - 이 시간 동안 전투 행동이 없으면 전투 종료")]
     public float combatEndJudgmentDuration = 15f;
     
+    [Space(10)]
+    [Header("S랭크 궁극기 버프 시스템")]
+    [Tooltip("S랭크 궁극기 버프 - 용기 획득량 증가 배율")]
+    public float ultimateBuffCourageGainMultiplier = 1.5f;
+    
+    [Tooltip("S랭크 궁극기 버프 - 정신력 회복 속도 증가 배율")]
+    public float ultimateBuffMentalPowerRegenMultiplier = 2f;
+    
+    [Tooltip("S랭크 궁극기 버프 - 이동 속도 증가 배율")]
+    public float ultimateBuffMoveSpeedMultiplier = 1.2f;
+    
     #endregion
 }

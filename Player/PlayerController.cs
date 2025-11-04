@@ -61,6 +61,18 @@ public class PlayerController : EntityController
 	[Tooltip("누적 회복량 (소수점 회복량 저장용, 1 이상이 되면 정수로 변환하여 적용)")]
 	private float accumulatedRegen = 0f;
 
+	/// <summary>
+	/// 방에서 몬스터에게 데미지를 입힌 적이 있는지 여부
+	/// 방에 들어온 후 몬스터 한 대 때린 후부터 무피해 정신력 회복 시작
+	/// </summary>
+	private bool hasDealtDamageInRoom = false;
+
+	/// <summary>
+	/// 무피해 정신력 회복 시작 시간
+	/// 방에서 몬스터를 한 대 때린 후부터 카운트 시작
+	/// </summary>
+	private float roomNoDamageStartTime = 0f;
+
 	#endregion
 
 	#region 런타임 상태 - 용기 시스템
@@ -126,6 +138,16 @@ public class PlayerController : EntityController
 	/// 전투 종료 예정 시간 (이 시간 이후 전투 종료)
 	/// </summary>
 	private float combatEndTime = 0f;
+
+	/// <summary>
+	/// S랭크 궁극기 버프 활성화 여부
+	/// </summary>
+	private bool isUltimateBuffActive = false;
+
+	/// <summary>
+	/// S랭크 궁극기 버프 종료 시간
+	/// </summary>
+	private float ultimateBuffEndTime = 0f;
 
 	#endregion
 
@@ -328,6 +350,9 @@ public class PlayerController : EntityController
 
 		// ⭐ 용기 시스템 업데이트
 		UpdateCourageSystem(Time.deltaTime);
+
+		// ⭐ S랭크 궁극기 버프 업데이트
+		UpdateUltimateBuff(Time.deltaTime);
 	}
 
 	private void FixedUpdate()
@@ -448,6 +473,7 @@ public class PlayerController : EntityController
 
 	/// <summary>
 	/// 정신력 자동 회복 처리
+	/// 무피해일 때만 회복 (방에 들어온 후 몬스터 한 대 때린 후부터 카운트 시작)
 	/// </summary>
 	private void UpdateMentalPowerRegeneration(float deltaTime)
 	{
@@ -460,9 +486,32 @@ public class PlayerController : EntityController
 		}
 		if (!isAlive) return;
 
+		// ⭐ 무피해 정신력 회복: 방에서 몬스터를 한 대 때린 후부터만 작동
+		if (!hasDealtDamageInRoom)
+		{
+			// 아직 방에서 몬스터를 때리지 않았으면 회복하지 않음
+			accumulatedRegen = 0f;
+			return;
+		}
+
+		// ⭐ 무피해 체크: 마지막 피격 시간 이후 무피해일 때만 회복
+		float currentTime = Time.time;
+		
+		// 피격당한 적이 있으면 무피해 정신력 회복 없음
+		// lastHitTime이 roomNoDamageStartTime 이후에 있으면 피격당한 것
+		if (lastHitTime >= roomNoDamageStartTime)
+		{
+			// 피격당했으므로 회복하지 않음
+			accumulatedRegen = 0f;
+			return;
+		}
+
 		// 회복량 누적 (소수점 단위로 정확하게 계산)
 		int previousMentalPower = currentMentalPower;
-		float regenAmount = playerData.mentalPowerRegenRate * deltaTime;
+		
+		// ⭐ S랭크 궁극기 버프: 정신력 회복 속도 증가
+		float regenRateMultiplier = isUltimateBuffActive ? playerData.ultimateBuffMentalPowerRegenMultiplier : 1f;
+		float regenAmount = playerData.mentalPowerRegenRate * regenRateMultiplier * deltaTime;
 		accumulatedRegen += regenAmount;
 		
 		// 누적 회복량이 1 이상이 되면 정수로 변환하여 적용
@@ -550,13 +599,8 @@ public class PlayerController : EntityController
 
 		courageScore += amount;
 
-		// 용기 점수 범위 체크 (최소값: 0 이하 가능, 최대값: 제한 없음)
-		// 최소값은 Despair 상태를 허용하기 위해 제한하지 않음
-		// 음수도 가능하도록 하되, 너무 낮아지면 로그 출력 (선택사항)
-		if (courageScore < -1000)
-		{
-			Debug.LogWarning($"[PlayerController] 용기 점수가 매우 낮습니다: {courageScore} (최소값 제한 없음)");
-		}
+		// ⭐ 용기 점수 최소값 제한: 0 이하로 떨어지지 않도록 제한
+		courageScore = Mathf.Max(0, courageScore);
 
 		// 용기 단계 재계산
 		UpdateCourageState();
@@ -572,9 +616,6 @@ public class PlayerController : EntityController
 		{
 			Debug.Log($"[PlayerController] ⭐ 용기 점수 변경으로 인한 랭크 변경: {previousScore} → {courageScore} (변화: {(amount > 0 ? "+" : "")}{amount}), 랭크: {previousRank} → {currentSkillRank}");
 		}
-
-		// 절망 상태 체크
-		CheckDespairState();
 	}
 
 	/// <summary>
@@ -586,16 +627,10 @@ public class PlayerController : EntityController
 		int previousScore = courageScore;
 		courageScore = score;
 
-		// 용기 점수 범위 체크 (최소값: 0 이하 가능, 최대값: 제한 없음)
-		// 최소값은 Despair 상태를 허용하기 위해 제한하지 않음
-		// 음수도 가능하도록 하되, 너무 낮아지면 로그 출력 (선택사항)
-		if (courageScore < -1000)
-		{
-			Debug.LogWarning($"[PlayerController] 용기 점수가 매우 낮습니다: {courageScore} (최소값 제한 없음)");
-		}
+		// ⭐ 용기 점수 최소값 제한: 0 이하로 떨어지지 않도록 제한
+		courageScore = Mathf.Max(0, courageScore);
 
 		UpdateCourageState();
-		CheckDespairState();
 	}
 
 	/// <summary>
@@ -661,15 +696,16 @@ public class PlayerController : EntityController
 	}
 
 	/// <summary>
-	/// 절망 상태 체크
-	/// 용기 점수가 Despair 이하로 떨어지면 게임오버
+	/// 절망 상태 체크 (현재 미사용)
+	/// 용기 점수가 0 이하로 떨어지지 않도록 제한되어 있어 게임오버 처리가 필요 없음
 	/// </summary>
 	private void CheckDespairState()
 	{
-		if (currentCourageState == CourageState.Despair)
-		{
-			OnDespairReached();
-		}
+		// ⭐ 용기 점수 최소값이 0으로 제한되어 있어 게임오버 처리가 필요 없음
+		// if (currentCourageState == CourageState.Despair)
+		// {
+		// 	OnDespairReached();
+		// }
 	}
 
 	/// <summary>
@@ -763,26 +799,11 @@ public class PlayerController : EntityController
 		float currentTime = Time.time;
 		float timeSinceLastCombat = currentTime - lastCombatActionTime;
 		
-		// ⭐ 자세한 디버그 로그: 전투 없음 페널티 계산 과정
-		Debug.Log($"[PlayerController] ⚠️ 전투 없음 페널티 체크 시작:\n" +
-		          $"  - 현재 시간: {currentTime:F2}초\n" +
-		          $"  - 마지막 전투 행동 시간: {lastCombatActionTime:F2}초\n" +
-		          $"  - 경과 시간: {timeSinceLastCombat:F2}초\n" +
-		          $"  - 판정 시간 (noCombatJudgmentDuration): {playerData.noCombatJudgmentDuration:F2}초\n" +
-		          $"  - 초당 감소량 (noCombatCourageLossPerSecond): {playerData.noCombatCourageLossPerSecond:F2}/초\n" +
-		          $"  - DeltaTime: {deltaTime:F4}초\n" +
-		          $"  - 누적 감소량 (이전): {accumulatedNoCombatLoss:F4} 용기");
-		
 		if (timeSinceLastCombat > playerData.noCombatJudgmentDuration)
 		{
 			// 전투 없음 페널티 누적 (소수점 단위로 정확하게 계산)
 			float lossAmount = playerData.noCombatCourageLossPerSecond * deltaTime;
 			accumulatedNoCombatLoss += lossAmount;
-			
-			// ⭐ 자세한 디버그 로그: 페널티 계산 결과
-			Debug.Log($"[PlayerController] ⚠️ 전투 없음 페널티 계산:\n" +
-			          $"  - 이번 프레임 감소량 (소수점): {lossAmount:F4} 용기\n" +
-			          $"  - 누적 감소량 (누적 후): {accumulatedNoCombatLoss:F4} 용기");
 			
 			// 누적 감소량이 1 이상이 되면 정수로 변환하여 적용
 			if (accumulatedNoCombatLoss >= 1f)
@@ -792,17 +813,7 @@ public class PlayerController : EntityController
 				
 				if (lossToApply > 0)
 				{
-					int previousCourageScore = courageScore;
 					ChangeCourageScore(-lossToApply);
-					
-					// ⭐ 자세한 디버그 로그: 페널티 적용 완료
-					Debug.Log($"[PlayerController] ⚠️ 전투 없음 페널티 적용 완료:\n" +
-					          $"  - 적용 전 용기 점수: {previousCourageScore}\n" +
-					          $"  - 감소량: -{lossToApply} 용기\n" +
-					          $"  - 적용 후 용기 점수: {courageScore}\n" +
-					          $"  - 경과 시간: {timeSinceLastCombat:F2}초 (판정 시간: {playerData.noCombatJudgmentDuration:F2}초 초과)\n" +
-					          $"  - 초당 감소량: {playerData.noCombatCourageLossPerSecond:F2}/초\n" +
-					          $"  - 누적 감소량 (남은 소수점): {accumulatedNoCombatLoss:F4} 용기");
 				}
 			}
 		}
@@ -866,34 +877,20 @@ public class PlayerController : EntityController
 		float gainAmount = gainPerSecond * deltaTime;
 		accumulatedNoDamageGain += gainAmount;
 		
-		// ⭐ 자세한 디버그 로그: 무피해 용기 획득 계산
-		Debug.Log($"[PlayerController] ⭐ 무피해 용기 획득 계산:\n" +
-		          $"  - 현재 시간: {currentTime:F2}초\n" +
-		          $"  - 마지막 피격 시간: {lastHitTime:F2}초\n" +
-		          $"  - 경과 시간: {timeSinceLastHit:F2}초\n" +
-		          $"  - 초당 획득량: {gainPerSecond:F2}/초\n" +
-		          $"  - 이번 프레임 획득량 (소수점): {gainAmount:F4} 용기\n" +
-		          $"  - 누적 획득량 (누적 후): {accumulatedNoDamageGain:F4} 용기");
-		
 		// 누적 획득량이 1 이상이 되면 정수로 변환하여 적용
 		if (accumulatedNoDamageGain >= 1f)
 		{
-			int gainToApply = Mathf.FloorToInt(accumulatedNoDamageGain); // 소수점 버림
-			accumulatedNoDamageGain -= gainToApply; // 적용한 만큼 차감
+			int baseGainToApply = Mathf.FloorToInt(accumulatedNoDamageGain); // 소수점 버림
+			accumulatedNoDamageGain -= baseGainToApply; // 적용한 만큼 차감
 			
-			if (gainToApply > 0)
+			if (baseGainToApply > 0)
 			{
-				int previousCourageScore = courageScore;
-				ChangeCourageScore(gainToApply);
+				// ⭐ S랭크 궁극기 버프: 용기 획득량 1.5배
+				int finalGainToApply = isUltimateBuffActive 
+					? Mathf.RoundToInt(baseGainToApply * 1.5f) 
+					: baseGainToApply;
 				
-				// ⭐ 자세한 디버그 로그: 무피해 용기 획득 적용 완료
-				Debug.Log($"[PlayerController] ⭐ 무피해 용기 획득 적용 완료:\n" +
-				          $"  - 적용 전 용기 점수: {previousCourageScore}\n" +
-				          $"  - 획득량: +{gainToApply} 용기\n" +
-				          $"  - 적용 후 용기 점수: {courageScore}\n" +
-				          $"  - 경과 시간: {timeSinceLastHit:F2}초\n" +
-				          $"  - 초당 획득량: {gainPerSecond:F2}/초\n" +
-				          $"  - 누적 획득량 (남은 소수점): {accumulatedNoDamageGain:F4} 용기");
+				ChangeCourageScore(finalGainToApply);
 			}
 		}
 	}
@@ -938,6 +935,15 @@ public class PlayerController : EntityController
 		// 멀티킬 보너스 계산
 		int multiKillBonus = CalculateMultiKillBonus(multiKillCount);
 		
+		// ⭐ 멀티킬 수가 5까지 도달하고 보너스를 받은 후 초기화
+		if (multiKillCount >= 5 && multiKillBonus > 0)
+		{
+			// 멀티킬 수 5까지 도달하고 보너스를 받았으므로 처치 기록 초기화
+			recentKillRecords.Clear();
+			recentMultiKillRecords.Clear();
+			Debug.Log($"[PlayerController] ⭐ 멀티킬 수 5까지 도달! 보너스 획득 후 멀티킬 기록 초기화 (멀티킬 수: {multiKillCount}, 보너스: +{multiKillBonus})");
+		}
+		
 		// 스킬 연계 보너스 계산
 		int comboBonus = CalculateSkillComboBonus(usedSkill);
 		
@@ -953,14 +959,29 @@ public class PlayerController : EntityController
 		
 		if (totalCourageGain > 0)
 		{
-			ChangeCourageScore(totalCourageGain);
-			Debug.Log($"[PlayerController] 용기 획득: +{totalCourageGain} " +
+			// ⭐ S랭크 궁극기 버프: 용기 획득량 1.5배
+			int finalCourageGain = isUltimateBuffActive 
+				? Mathf.RoundToInt(totalCourageGain * 1.5f) 
+				: totalCourageGain;
+			
+			ChangeCourageScore(finalCourageGain);
+			Debug.Log($"[PlayerController] 용기 획득: +{finalCourageGain} " +
 			          $"(기본: {baseCourageGain}, 멀티킬: +{multiKillBonus}, 연계: +{comboBonus}, " +
-			          $"{usedSkill} 스킬, 멀티킬 수: {multiKillCount})");
+			          $"{usedSkill} 스킬, 멀티킬 수: {multiKillCount}" +
+			          (isUltimateBuffActive ? " [궁극기 버프 1.5배 적용!]" : "") + ")");
 		}
 
 		// 전투 행동 시간 업데이트
 		lastCombatActionTime = currentTime;
+		
+		// ⭐ 무피해 정신력 회복 시작: 방에서 몬스터를 한 대 때린 후부터 카운트 시작
+		if (!hasDealtDamageInRoom)
+		{
+			hasDealtDamageInRoom = true;
+			roomNoDamageStartTime = currentTime;
+			lastHitTime = currentTime; // 무피해 카운트 시작 시점
+			Debug.Log($"[PlayerController] 무피해 정신력 회복 시작 - 방에서 몬스터 첫 처치 ({currentTime:F2}초)");
+		}
 		
 		// ⭐ 전투 행동 발생: 전투 시간 연장 및 전투 없음 페널티 누적량 초기화
 		ExtendCombatTime();
@@ -1122,9 +1143,28 @@ public class PlayerController : EntityController
 		}
 	}
 
+	/// <summary>
+	/// 궁극기 사용 시 호출
+	/// S랭크에서 스킬을 사용했을 때 호출됨 (궁극기 실행 후)
+	/// </summary>
+	public void OnUltimateSkillUsed()
+	{
+		if (playerData == null) return;
+
+		Debug.Log($"[PlayerController] ⭐⭐⭐ 궁극기 사용! S랭크에서 스킬 사용 - 즉시 D랭크로 추락 및 용기 0 리셋");
+		
+		// 즉시 D랭크로 추락 (용기 0으로 설정)
+		SetCourageScore(0);
+		
+		// S랭크 궁극기 버프 발동 (15초간)
+		ActivateUltimateBuff(15f);
+	}
+
 
 	/// <summary>
 	/// 플레이어 피격 처리
+	/// 플레이어가 몬스터에게 데미지를 입었을 때 호출됨
+	/// OnDamaged()에서 호출되어 실제 데미지가 들어간 경우에만 실행됨
 	/// </summary>
 	private void OnPlayerHit(object damageSource)
 	{
@@ -1141,12 +1181,30 @@ public class PlayerController : EntityController
 		lastHitTime = currentTime;
 		lastCombatActionTime = currentTime;
 
-		// ⭐ 전투 행동 발생: 전투 시간 연장 및 전투 없음 페널티 누적량 초기화
-		ExtendCombatTime();
+		// ⭐ 피격 시 무피해 정신력 회복 리셋: 무피해 카운트 시작 시간을 현재 시간으로 설정
+		if (hasDealtDamageInRoom)
+		{
+			roomNoDamageStartTime = currentTime;
+			accumulatedRegen = 0f; // 누적 회복량 초기화
+			Debug.Log($"[PlayerController] 피격으로 인한 무피해 정신력 회복 리셋 ({currentTime:F2}초)");
+		}
+
+		// ⭐ 플레이어가 몬스터에게 데미지를 입었을 때 전투 시간 연장 (전투 중이 아니면 전투 재개, 전투 중이면 15초 추가)
+		// 이 위치가 플레이어가 실제로 데미지를 입은 시점입니다!
+		ExtendCombatTime(isHit: true);
+		
+		// ⭐ 전투 행동 발생: 전투 없음 페널티 누적량 초기화
 		if (accumulatedNoCombatLoss > 0f)
 		{
 			Debug.Log($"[PlayerController] 피격으로 인한 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
 			accumulatedNoCombatLoss = 0f;
+		}
+
+		// ⭐ 피격 시 무피해 용기 획득 누적량 초기화 (피격당했으므로 무피해 보너스 없음)
+		if (accumulatedNoDamageGain > 0f)
+		{
+			Debug.Log($"[PlayerController] 피격으로 인한 무피해 용기 획득 누적량 초기화: {accumulatedNoDamageGain:F4} 용기");
+			accumulatedNoDamageGain = 0f;
 		}
 
 		// 피격 기록 추가 (10초 유지)
@@ -1219,18 +1277,22 @@ public class PlayerController : EntityController
 			return;
 		}
 
-		int courageGain = playerData.perfectDodgeCourageGain;
-		if (courageGain > 0)
+		int baseCourageGain = playerData.perfectDodgeCourageGain;
+		
+		// ⭐ S랭크 궁극기 버프: 용기 획득량 1.5배
+		int finalCourageGain = isUltimateBuffActive 
+			? Mathf.RoundToInt(baseCourageGain * 1.5f) 
+			: baseCourageGain;
+		
+		if (finalCourageGain > 0)
 		{
-			ChangeCourageScore(courageGain);
-			Debug.Log($"[PlayerController] 완벽한 회피 용기 획득: +{courageGain}");
+			ChangeCourageScore(finalCourageGain);
+			Debug.Log($"[PlayerController] 완벽한 회피 용기 획득: +{finalCourageGain}" +
+			          (isUltimateBuffActive ? " [궁극기 버프 1.5배 적용!]" : ""));
 		}
 
 		// 전투 행동 시간 업데이트
 		lastCombatActionTime = Time.time;
-		
-		// ⭐ 전투 행동 발생: 전투 시간 연장
-		ExtendCombatTime();
 	}
 
 	/// <summary>
@@ -1274,12 +1336,58 @@ public class PlayerController : EntityController
 		// 누적량 초기화
 		accumulatedNoCombatLoss = 0f;
 		accumulatedNoDamageGain = 0f;
+		accumulatedRegen = 0f; // 정신력 회복 누적량 초기화
+
+		// ⭐ 무피해 정신력 회복 시스템 초기화
+		hasDealtDamageInRoom = false;
+		roomNoDamageStartTime = 0f;
 
 		// 전투 상태 초기화
 		isInCombat = false;
 		combatEndTime = 0f;
 
-		Debug.Log("[PlayerController] 방 클리어 - 용기 시스템 기록 초기화 (누적량 및 전투 상태 포함)");
+		Debug.Log("[PlayerController] 방 클리어 - 용기 시스템 기록 초기화 (누적량, 전투 상태, 무피해 정신력 회복 포함)");
+	}
+
+	#endregion
+
+	#region S랭크 궁극기 시스템
+
+	/// <summary>
+	/// S랭크 궁극기 버프 발동
+	/// </summary>
+	/// <param name="duration">버프 지속 시간 (초)</param>
+	private void ActivateUltimateBuff(float duration)
+	{
+		float currentTime = Time.time;
+		isUltimateBuffActive = true;
+		ultimateBuffEndTime = currentTime + duration;
+		
+		Debug.Log($"[PlayerController] ⭐⭐⭐ S랭크 궁극기 버프 발동! (지속 시간: {duration}초)\n" +
+		          $"  - 용기 획득량 증가: 1.5배\n" +
+		          $"  - 정신력 회복 속도 증가: 2배\n" +
+		          $"  - 이동 속도 증가: 1.2배");
+	}
+
+	/// <summary>
+	/// S랭크 궁극기 버프 업데이트
+	/// 매 프레임 호출되어 버프 종료 시간을 체크
+	/// </summary>
+	private void UpdateUltimateBuff(float deltaTime)
+	{
+		if (!isUltimateBuffActive) return;
+
+		float currentTime = Time.time;
+		
+		// 버프 종료 시간 체크
+		if (currentTime >= ultimateBuffEndTime)
+		{
+			// 버프 종료
+			isUltimateBuffActive = false;
+			ultimateBuffEndTime = 0f;
+			
+			Debug.Log("[PlayerController] ⭐ S랭크 궁극기 버프 종료");
+		}
 	}
 
 	#endregion
@@ -1309,10 +1417,11 @@ public class PlayerController : EntityController
 
 	/// <summary>
 	/// 전투 시간 연장
-	/// 전투 행동(공격/피격) 발생 시 호출되어 전투 시간을 연장
+	/// 전투 행동(공격/스킬 사용/피격) 발생 시 호출되어 전투 시간을 연장
 	/// 전투가 종료되어 있으면 전투 재개
 	/// </summary>
-	private void ExtendCombatTime()
+	/// <param name="isHit">피격으로 인한 호출인지 여부 (피격 시 true, 일반 전투 행동 시 false)</param>
+	private void ExtendCombatTime(bool isHit = false)
 	{
 		if (playerData == null) return;
 
@@ -1337,21 +1446,32 @@ public class PlayerController : EntityController
 
 		// 전투 중이면 전투 시간 연장
 		float newCombatEndTime = currentTime + playerData.combatExtensionDuration;
+		float previousEndTime = combatEndTime;
 
-		// 기존 종료 시간보다 늦으면 연장, 아니면 그대로
-		if (newCombatEndTime > combatEndTime)
-		{
-			float previousEndTime = combatEndTime;
-			combatEndTime = newCombatEndTime;
-			float remainingTime = combatEndTime - currentTime;
-			Debug.Log($"[PlayerController] ⚔️ 전투 시간 연장!\n" +
-			          $"  - 전투 상태: 전투 중 (isInCombat = true)\n" +
-			          $"  - 현재 시간: {currentTime:F2}초\n" +
-			          $"  - 이전 종료 시간: {previousEndTime:F2}초\n" +
-			          $"  - 새로운 종료 시간: {combatEndTime:F2}초\n" +
-			          $"  - 남은 전투 시간: {remainingTime:F2}초\n" +
-			          $"  - 연장 시간: {playerData.combatExtensionDuration}초");
-		}
+		// 기존 종료 시간과 새로 계산한 시간 중 더 늦은 시간으로 설정
+		// (피격 여부와 관계없이 항상 최소한 현재 시간 + 연장 시간은 보장)
+		combatEndTime = Mathf.Max(combatEndTime, newCombatEndTime);
+		
+		float remainingTime = combatEndTime - currentTime;
+		
+		// 로그 메시지 생성
+		string actionType = isHit ? "피격으로 인한" : "";
+		string logMessage = combatEndTime > previousEndTime 
+			? $"[PlayerController] ⚔️ 전투 중 - {actionType}전투 시간 연장!\n" +
+			  $"  - 전투 상태: 전투 중 (isInCombat = true)\n" +
+			  $"  - 현재 시간: {currentTime:F2}초\n" +
+			  $"  - 이전 종료 시간: {previousEndTime:F2}초\n" +
+			  $"  - 새로운 종료 시간: {combatEndTime:F2}초\n" +
+			  $"  - 남은 전투 시간: {remainingTime:F2}초\n" +
+			  $"  - 연장 시간: {playerData.combatExtensionDuration}초"
+			: $"[PlayerController] ⚔️ 전투 중 - {actionType}전투 시간 연장 시도 (기존 종료 시간이 더 늦음)\n" +
+			  $"  - 전투 상태: 전투 중 (isInCombat = true)\n" +
+			  $"  - 현재 시간: {currentTime:F2}초\n" +
+			  $"  - 전투 종료 예정 시간: {combatEndTime:F2}초 (변경 없음, 기존 시간이 더 늦음)\n" +
+			  $"  - 남은 전투 시간: {remainingTime:F2}초\n" +
+			  $"  - 계산된 새로운 종료 시간: {newCombatEndTime:F2}초 (기존 시간이 더 늦어서 적용 안 됨)";
+		
+		Debug.Log(logMessage);
 	}
 
 	/// <summary>
@@ -1576,6 +1696,13 @@ public class PlayerController : EntityController
 		// 이동속도 계산 (기본 속도 × 상태효과 배율)
 		float moveSpeed = playerData != null ? playerData.moveSpeed : 5f;
 		float speedMultiplier = GetMoveSpeedMultiplier(); // EntityController에서 제공
+		
+		// ⭐ S랭크 궁극기 버프: 이동 속도 1.2배
+		if (isUltimateBuffActive)
+		{
+			speedMultiplier *= 1.2f;
+		}
+		
 		float finalSpeed = moveSpeed * speedMultiplier;
 
 		// ⭐ Dynamic Rigidbody2D는 velocity 사용 (물리 충돌 자동 처리)
@@ -1734,6 +1861,7 @@ public class PlayerController : EntityController
 	/// <summary>
 	/// 플레이어 피격 처리
 	/// EntityController의 OnDamaged()를 오버라이드
+	/// 플레이어가 몬스터에게 데미지를 입었을 때 호출됨
 	/// </summary>
 	protected override void OnDamaged(int damageAmount, object damageSource)
 	{
@@ -1748,7 +1876,8 @@ public class PlayerController : EntityController
 			hitShake.ApplyShake(camShake, damageAmount);
 		}
 
-		// ⭐ 피격 시 용기 감소 처리 (용기 시스템)
+		// ⭐ 플레이어가 몬스터에게 데미지를 입었을 때 용기 감소 및 전투 시간 연장 처리
+		// OnPlayerHit()에서 ExtendCombatTime(isHit: true)가 호출되어 전투 시간이 15초 연장됩니다
 		OnPlayerHit(damageSource);
 	}
 	
