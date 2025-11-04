@@ -81,13 +81,13 @@ public class PlayerDataSO : EntityDataSO
     public int multiKill2Bonus = 20;
     
     [Tooltip("3마리 동시 처치 보너스")]
-    public int multiKill3Bonus = 40;
+    public int multiKill3Bonus = 30;
     
     [Tooltip("4마리 동시 처치 보너스")]
-    public int multiKill4Bonus = 70;
+    public int multiKill4Bonus = 40;
     
     [Tooltip("5마리 이상 동시 처치 보너스")]
-    public int multiKill5Bonus = 120;
+    public int multiKill5Bonus = 50;
     
     [Space(5)]
     [Header("스킬 연계 시스템 (서로 다른 스킬 연속 사용 보너스)")]
@@ -104,6 +104,12 @@ public class PlayerDataSO : EntityDataSO
     [Header("용기 획득 - 방어적 플레이")]
     [Tooltip("완벽한 회피 시 용기 획득량 (근접 회피)")]
     public int perfectDodgeCourageGain = 25;
+    
+    [Tooltip("완벽한 회피 판정 범위 (플레이어 히트박스 반지름 + 여유)")]
+    public float perfectDodgeRange = 0.8f;
+    
+    [Tooltip("완벽한 회피 판정 안전 거리 (탄환이 이 거리 이상 멀어지면 판정)")]
+    public float perfectDodgeSafeDistance = 1.5f;
     
     [Tooltip("무피해 유지 시 초당 용기 획득량 (10초 이상)")]
     public float noDamageCourageGainPerSecond_10 = 5f;
@@ -158,6 +164,17 @@ public class PlayerDataSO : EntityDataSO
     
     [Tooltip("완벽한 회피 판정 시간 (초)")]
     public float perfectDodgeJudgmentDuration = 0.3f;
+    
+    [Space(10)]
+    [Header("전투 시간 시스템")]
+    [Tooltip("방 진입 시 기본 전투 활성화 시간 (초)")]
+    public float initialCombatDuration = 30f;
+    
+    [Tooltip("전투 행동 시 전투 시간 연장량 (초) - 공격/피격 시 추가되는 시간")]
+    public float combatExtensionDuration = 15f;
+    
+    [Tooltip("전투 종료 판정 시간 (초) - 이 시간 동안 전투 행동이 없으면 전투 종료")]
+    public float combatEndJudgmentDuration = 15f;
     
     #endregion
 }
