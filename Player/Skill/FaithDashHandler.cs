@@ -465,12 +465,8 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			);
 		}
 		
-		// ⭐ 재사용 모드일 때는 쿨타임을 시작하지 않음
-		if (skillSlot != null)
-		{
-			// SkillSlot에 쿨타임 취소 기능이 있다면 호출
-			// 현재는 쿨타임이 시작되지 않도록 ExecuteSkill에서 처리됨
-		}
+		// ⭐ 1초 후에 표식 확인 후 금색 펄스 표시 (수리검이 날아가서 표식이 생기는 시간)
+		StartCoroutine(ShowInstantReadyAfterMarksApplied());
 		
 		// 재사용 타이머 시작
 		if (rechargeCoroutine != null)
@@ -480,6 +476,26 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		rechargeCoroutine = StartCoroutine(RechargeTimer());
 		
 		Debug.Log($"[FaithDashHandler] 재사용 모드 시작 - 지속 시간: {remainingTime}초 (표식 체크 유예 1초)");
+	}
+	
+	/// <summary>
+	/// 표식이 적중한 후 금색 펄스 표시
+	/// </summary>
+	private IEnumerator ShowInstantReadyAfterMarksApplied()
+	{
+		// 1초 대기 (수리검이 날아가서 표식이 생기는 시간)
+		yield return new WaitForSeconds(1f);
+		
+		// 여전히 재사용 모드이고 표식이 있는 적이 있을 때만 금색 펄스 표시
+		if (isInRechargeMode && HasAnyMarkedEnemy() && skillSlot != null)
+		{
+			SkillUIEvents.InvokeCooldownInstantReset(skillSlot.SlotType);
+			Debug.Log($"[FaithDashHandler] ⚡ 즉시 재사용 가능! (금색 펄스) - 표식 확인 완료");
+		}
+		else if (isInRechargeMode && !HasAnyMarkedEnemy())
+		{
+			Debug.LogWarning($"[FaithDashHandler] ⚠️ 표식이 있는 적이 없어 금색 펄스 표시 안 함");
+		}
 	}
 	
 	/// <summary>

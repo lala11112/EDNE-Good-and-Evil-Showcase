@@ -46,6 +46,13 @@ public static class SkillUIEvents
 	public static event Action<SkillSlotType> OnCooldownEnded;
 	
 	/// <summary>
+	/// 쿨타임 즉시 초기화 이벤트 (특별한 조건으로 인한 즉시 재사용)
+	/// 매개변수: (슬롯 타입)
+	/// 용기의 질주 등 특수 조건 충족 시 발생
+	/// </summary>
+	public static event Action<SkillSlotType> OnCooldownInstantReset;
+	
+	/// <summary>
 	/// 쿨타임 시작 이벤트 호출
 	/// </summary>
 	public static void InvokeCooldownStarted(SkillSlotType slotType, float cooldownTime)
@@ -67,6 +74,14 @@ public static class SkillUIEvents
 	public static void InvokeCooldownEnded(SkillSlotType slotType)
 	{
 		OnCooldownEnded?.Invoke(slotType);
+	}
+	
+	/// <summary>
+	/// 쿨타임 즉시 초기화 이벤트 호출
+	/// </summary>
+	public static void InvokeCooldownInstantReset(SkillSlotType slotType)
+	{
+		OnCooldownInstantReset?.Invoke(slotType);
 	}
 	
 	#endregion
@@ -132,6 +147,7 @@ public static class SkillUIEvents
 		OnCooldownStarted = null;
 		OnCooldownUpdated = null;
 		OnCooldownEnded = null;
+		OnCooldownInstantReset = null;
 		OnSkillAvailabilityChanged = null;
 		OnSkillUsed = null;
 		OnSkillUseFailed = null;

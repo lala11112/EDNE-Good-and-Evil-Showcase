@@ -178,6 +178,10 @@ public class SkillSlot : MonoBehaviour
         bool isFaithDash = (faithDashHandler != null);
         bool isFaithDashRecharging = (isFaithDash && faithDashHandler.IsInRechargeMode);
         
+        // RainOfFaithHandler 특수 처리 (자체적으로 쿨타임 관리)
+        RainOfFaithHandler rainOfFaithHandler = handler as RainOfFaithHandler;
+        bool isRainOfFaith = (rainOfFaithHandler != null);
+        
         // 쿨타임 체크 (FaithDash 재사용 모드일 때는 쿨타임 무시)
         if (isOnCooldown && !isFaithDashRecharging)
         {
@@ -252,14 +256,20 @@ public class SkillSlot : MonoBehaviour
         
         handler.Use(rank);
         
-        // ⭐ 쿨타임 시작 - FaithDash는 절대 여기서 쿨타임 시작 안 함 (재사용 모드 종료 시 시작)
-        if (!isFaithDash)
+        // ⭐ 쿨타임 시작
+        // - FaithDash: 재사용 모드 종료 시 시작 (자체 관리)
+        // - RainOfFaith: 설치/폭발 단계별로 자체 관리
+        if (!isFaithDash && !isRainOfFaith)
         {
             StartCooldown();
         }
-        else
+        else if (isFaithDash)
         {
-            Debug.Log($"[SkillSlot] {currentSkillData.skillName} - FaithDash 스킬이므로 쿨타임 시작 안 함");
+            Debug.Log($"[SkillSlot] {currentSkillData.skillName} - FaithDash 스킬이므로 쿨타임 자체 관리");
+        }
+        else if (isRainOfFaith)
+        {
+            Debug.Log($"[SkillSlot] {currentSkillData.skillName} - RainOfFaith 스킬이므로 쿨타임 자체 관리");
         }
     }
     
@@ -285,6 +295,22 @@ public class SkillSlot : MonoBehaviour
     }
     
     /// <summary>
+    /// 외부(핸들러)에서 커스텀 쿨타임 시작 요청
+    /// 특정 시간을 지정하여 쿨타임 시작
+    /// </summary>
+    public void StartCooldownFromHandler(float customCooldownTime)
+    {
+        isOnCooldown = true;
+        currentCooldown = customCooldownTime;
+        totalCooldown = customCooldownTime;
+        
+        // 쿨타임 시작 이벤트
+        SkillUIEvents.InvokeCooldownStarted(slotType, totalCooldown);
+        
+        Debug.Log($"{currentSkillData?.skillName ?? "Unknown"} 커스텀 쿨타임 시작: {currentCooldown}초");
+    }
+    
+    /// <summary>
     /// 쿨타임 강제 종료 (즉시 재사용 가능하게 만듦)
     /// 용기의 질주처럼 적 충돌 시 즉시 재사용 가능하게 만들 때 사용
     /// </summary>
@@ -295,8 +321,8 @@ public class SkillSlot : MonoBehaviour
             currentCooldown = 0f;
             isOnCooldown = false;
             
-            // 쿨타임 종료 이벤트 발생
-            SkillUIEvents.InvokeCooldownEnded(slotType);
+            // ⭐ 즉시 재사용 가능 이벤트 발생 (특별한 색상 표시용)
+            SkillUIEvents.InvokeCooldownInstantReset(slotType);
             
             Debug.Log($"[SkillSlot] {currentSkillData?.skillName ?? "Unknown"} 쿨타임 강제 초기화! 즉시 재사용 가능!");
         }

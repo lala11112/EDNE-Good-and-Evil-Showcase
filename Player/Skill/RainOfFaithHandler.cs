@@ -230,11 +230,11 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		lastPosition = playerController.transform.position;
 		timeSinceLastAfterimage = 0f;
 		
-		// ⭐ 설치 모드 시작 시 즉시 쿨타임 시작 (설치 중에 쿨타임이 돌아감)
+		// ⭐ 설치 모드 시작 시 0.5초 쿨타임 시작 (빠르게 폭발 가능)
 		if (skillSlot != null)
 		{
-			skillSlot.StartCooldownFromHandler();
-			Debug.Log($"[RainOfFaithHandler] ⏰ 쿨타임 시작! 설치 중에 쿨타임이 돌아갑니다.");
+			skillSlot.StartCooldownFromHandler(0.5f);
+			Debug.Log($"[RainOfFaithHandler] ⏰ 0.5초 쿨타임 시작! 빠르게 폭발 가능합니다.");
 		}
 		
 		Debug.Log($"[RainOfFaithHandler] 🔧 설치 모드 활성화 - 속도 배율: {speedMultiplier}x");
@@ -296,7 +296,13 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			Debug.LogWarning("[RainOfFaithHandler] ⚠️ 설치된 잔상이 없습니다!");
 			StopSetupMode();
-			// 쿨타임은 설치 모드 시작 시 이미 시작됨
+			
+			// 잔상이 없으면 원래 쿨타임 시작
+			if (skillSlot != null)
+			{
+				skillSlot.StartCooldownFromHandler();
+				Debug.Log($"[RainOfFaithHandler] ⏰ 잔상 없음 - 정상 쿨타임 시작");
+			}
 			return;
 		}
 		
@@ -308,8 +314,12 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		// 연쇄 폭발 코루틴 시작
 		StartCoroutine(ExplosionSequence());
 		
-		// 쿨타임은 설치 모드 시작 시 이미 시작되었으므로 여기서는 시작하지 않음
-		Debug.Log($"[RainOfFaithHandler] 💥 폭발 완료! 쿨타임은 설치 시 시작되었습니다.");
+		// ⭐ 폭발 후 원래 스킬의 쿨타임 시작
+		if (skillSlot != null)
+		{
+			skillSlot.StartCooldownFromHandler();
+			Debug.Log($"[RainOfFaithHandler] 💥 폭발 완료! 원래 쿨타임 시작 ({skillData?.cooldown ?? 0}초)");
+		}
 	}
 	
 	/// <summary>
@@ -363,6 +373,13 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		
 		StopSetupMode();
 		DestroyAllAfterimages();
+		
+		// ⭐ 자동 종료 시 원래 쿨타임 시작
+		if (skillSlot != null)
+		{
+			skillSlot.StartCooldownFromHandler();
+			Debug.Log($"[RainOfFaithHandler] ⏰ 자동 종료 - 원래 쿨타임 시작");
+		}
 	}
 	
 	#endregion
