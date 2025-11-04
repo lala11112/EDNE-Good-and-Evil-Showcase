@@ -20,6 +20,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("플레이어 컨트롤러")]
 	private PlayerController playerController;
 	
+	[Tooltip("스킬 슬롯 참조 (쿨타임 관리용)")]
+	private SkillSlot skillSlot;
+	
 	#endregion
 	
 	#region 이동속도 버프
@@ -35,6 +38,7 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	private float remainingDuration = 0f;
 	private float originalMoveSpeed = 0f;
 	private SkillRank currentRank;
+	private bool isInSetupMode = false; // 설치 모드 상태
 	
 	#endregion
 	
@@ -57,6 +61,7 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	[SerializeField] private int[] maxAfterimagesByRank = new int[] { 10, 15, 20, 25, 30 };
 	
 	private List<GameObject> activeAfterimages = new List<GameObject>();
+	private List<GameObject> installedAfterimages = new List<GameObject>(); // 설치된 잔상 목록 (폭발용)
 	private float timeSinceLastAfterimage = 0f;
 	
 	#endregion
@@ -142,6 +147,13 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		if (playerSpriteRenderer == null)
 		{
 			playerSpriteRenderer = playerController.GetComponentInChildren<SpriteRenderer>();
+		}
+		
+		// SkillSlot 찾기
+		skillSlot = GetComponentInParent<SkillSlot>();
+		if (skillSlot == null)
+		{
+			Debug.LogWarning("[RainOfFaithHandler] SkillSlot을 찾을 수 없습니다!");
 		}
 		
 		Debug.Log("[RainOfFaithHandler] Setup 완료");
@@ -252,6 +264,17 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		}
 		
 		Debug.Log("[RainOfFaithHandler] 스킬 종료");
+	}
+	
+	/// <summary>
+	/// 설치 모드 종료
+	/// </summary>
+	private void StopSetupMode()
+	{
+		if (!isInSetupMode) return;
+		
+		isInSetupMode = false;
+		Debug.Log("[RainOfFaithHandler] 설치 모드 종료");
 	}
 	
 	#endregion

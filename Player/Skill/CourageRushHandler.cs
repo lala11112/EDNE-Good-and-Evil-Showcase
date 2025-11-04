@@ -115,6 +115,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("재사용 가능 표시 이펙트")]
 	[SerializeField] private GameObject rechargeReadyEffectPrefab;
 	
+	[Tooltip("바람을 가르는 이펙트")]
+	[SerializeField] private GameObject windSlashEffectPrefab;
+	
 	[Header("사운드 이펙트")]
 	[Tooltip("대쉬 시작 효과음")]
 	[SerializeField] private AudioClip dashStartSound;
@@ -124,6 +127,12 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("AOE 착지 효과음 딜레이 (초)")]
 	[SerializeField] private float aoeImpactSoundDelay = 0f;
+	
+	[Tooltip("적 충돌 효과음")]
+	[SerializeField] private AudioClip enemyCollisionSound;
+	
+	[Tooltip("궤적 폭발 효과음")]
+	[SerializeField] private AudioClip trailExplosionSound;
 	
 	#endregion
 	
