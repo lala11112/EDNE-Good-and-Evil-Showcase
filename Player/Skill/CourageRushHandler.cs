@@ -169,6 +169,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("AOE 착지 효과음")]
 	[SerializeField] private AudioClip aoeImpactSound;
 	
+	[Tooltip("AOE 착지 효과음 딜레이 (초)")]
+	[SerializeField] private float aoeImpactSoundDelay = 0f;
+	
 	#endregion
 	
 	#region SkillHandlerInterface 구현
@@ -342,7 +345,11 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		GameObject trail = null;
 		if (dashTrailPrefab != null)
 		{
-			trail = Instantiate(dashTrailPrefab, playerController.transform.position, Quaternion.identity);
+			// 돌진 방향을 바라보도록 회전 설정
+			float angle = Mathf.Atan2(dashDirection.y, dashDirection.x) * Mathf.Rad2Deg;
+			Quaternion rotation = Quaternion.Euler(0, 0, angle);
+			
+			trail = Instantiate(dashTrailPrefab, playerController.transform.position, rotation);
 			trail.transform.SetParent(playerController.transform);
 		}
 		
@@ -530,8 +537,15 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ApplyAOEEffect(Vector3 position, SkillRank rank)
 	{
-		// 0. AOE 착지 효과음 재생
-		PlayAOEImpactSound();
+		// 0. AOE 착지 효과음 재생 (딜레이 적용)
+		if (aoeImpactSoundDelay > 0f)
+		{
+			StartCoroutine(PlayAOEImpactSoundDelayed(aoeImpactSoundDelay));
+		}
+		else
+		{
+			PlayAOEImpactSound();
+		}
 		
 		// 1. 데미지 계산
 		float damage = CalculateDamage(rank);
@@ -878,6 +892,15 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			audioSource.PlayOneShot(aoeImpactSound);
 			Debug.Log("[CourageRushHandler] AOE 착지 효과음 재생");
 		}
+	}
+	
+	/// <summary>
+	/// AOE 착지 효과음 딜레이 후 재생
+	/// </summary>
+	private IEnumerator PlayAOEImpactSoundDelayed(float delay)
+	{
+		yield return new WaitForSeconds(delay);
+		PlayAOEImpactSound();
 	}
 	
 	/// <summary>
