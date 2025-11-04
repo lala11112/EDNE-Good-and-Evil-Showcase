@@ -131,25 +131,25 @@ public class SkillController : MonoBehaviour
     // 스킬 사용 이벤트들 (현재 스킬 랭크 전달)
     private void OnSkillZPerformed(InputAction.CallbackContext context)
     {
-        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        SkillRank rank = playerController != null ? playerController.CurrentSkillRank : SkillRank.D;
         zSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillXPerformed(InputAction.CallbackContext context)
     {
-        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        SkillRank rank = playerController != null ? playerController.CurrentSkillRank : SkillRank.D;
         xSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillCPerformed(InputAction.CallbackContext context)
     {
-        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        SkillRank rank = playerController != null ? playerController.CurrentSkillRank : SkillRank.D;
         cSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillVPerformed(InputAction.CallbackContext context)
     {
-        SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
+        SkillRank rank = playerController != null ? playerController.CurrentSkillRank : SkillRank.D;
         vSlot?.ExecuteSkill(rank);
     }
     
@@ -241,7 +241,6 @@ public class SkillController : MonoBehaviour
         }
         mentalCostMinimums[slotType] = skillData.mentalCostReductionMinimum;
         
-        Debug.Log($"[SkillController] {slotType} 슬롯 업데이트 - 가중치: {mentalCostWeights[slotType]}, 최소치: {mentalCostMinimums[slotType]}");
     }
     
     /// <summary>
@@ -265,24 +264,16 @@ public class SkillController : MonoBehaviour
     /// <param name="reductionAmount">감소량 (사용한 스킬의 otherSkillMentalCostReduction, 1.0이면 감소 없음)</param>
     public void OnSkillUsed(SkillSlotType usedSlotType, float reductionAmount)
     {
-        Debug.Log($"[SkillController] ===== {usedSlotType} 스킬 사용 - 배율 시스템 업데이트 시작 =====");
-        
         // 사용한 스킬의 배율을 1.0으로 리셋
-        float previousMultiplier = mentalCostMultipliers.ContainsKey(usedSlotType) ? mentalCostMultipliers[usedSlotType] : 1.0f;
         if (!mentalCostMultipliers.ContainsKey(usedSlotType))
         {
             mentalCostMultipliers[usedSlotType] = 1.0f;
         }
         mentalCostMultipliers[usedSlotType] = 1.0f;
         
-        Debug.Log($"[SkillController] {usedSlotType} 스킬 배율 리셋: {previousMultiplier:F3} → 1.000");
-        Debug.Log($"[SkillController] 사용한 스킬의 감소량: {reductionAmount:F3} (1.0 = 감소 없음)");
-        
         // 감소량이 1.0 미만일 때만 다른 스킬들의 배율 감소 적용
         if (reductionAmount < 1.0f)
         {
-            Debug.Log($"[SkillController] 감소량이 1.0 미만이므로 다른 스킬들의 배율 감소 적용 시작...");
-            
             // ⭐ Dictionary를 순회하는 도중 수정을 방지하기 위해 키 목록을 먼저 복사
             List<SkillSlotType> slotKeys = new List<SkillSlotType>(mentalCostMultipliers.Keys);
             
@@ -300,33 +291,10 @@ public class SkillController : MonoBehaviour
                 // ⭐ 최소치 적용 (계산된 배율이 최소치보다 작으면 최소치로 고정)
                 float newMultiplier = Mathf.Max(calculatedMultiplier, minimum);
                 
-                // ⭐ 디버그: 계산 과정 상세 로그
-                bool isClamped = (newMultiplier > calculatedMultiplier);
-                Debug.Log($"[SkillController] {slotKey} 스킬 배율 계산:\n" +
-                    $"  - 기존 배율: {currentMultiplier:F3}\n" +
-                    $"  - 감소량: {reductionAmount:F3} ({usedSlotType} 스킬 사용으로 인한 감소)\n" +
-                    $"  - 가중치: {weight:F3} ({slotKey} 스킬의 감소 가중치)\n" +
-                    $"  - 계산식: {currentMultiplier:F3} × {reductionAmount:F3} × {weight:F3} = {calculatedMultiplier:F3}\n" +
-                    $"  - 최소치: {minimum:F3} {(minimum > 0f ? $"(최소치 적용: {isClamped})" : "(제한 없음)")}\n" +
-                    $"  - 최종 결과: {currentMultiplier:F3} → {newMultiplier:F3} (변화량: {newMultiplier - currentMultiplier:F3}){(isClamped ? " [최소치로 고정됨]" : "")}");
-                
                 // 순회 중이 아닌 상태에서 수정
                 mentalCostMultipliers[slotKey] = newMultiplier;
             }
         }
-        else
-        {
-            Debug.Log($"[SkillController] 감소량이 1.0이므로 다른 스킬들의 배율 감소 없음");
-        }
-        
-        // ⭐ 전체 배율 상태 출력
-        Debug.Log($"[SkillController] 현재 모든 슬롯 배율 상태:\n" +
-            $"  - Z: {GetMentalCostMultiplier(SkillSlotType.Z):F3}\n" +
-            $"  - X: {GetMentalCostMultiplier(SkillSlotType.X):F3}\n" +
-            $"  - C: {GetMentalCostMultiplier(SkillSlotType.C):F3}\n" +
-            $"  - V: {GetMentalCostMultiplier(SkillSlotType.V):F3}");
-        
-        Debug.Log($"[SkillController] ===== {usedSlotType} 스킬 사용 - 배율 시스템 업데이트 완료 =====");
     }
     
     /// <summary>
@@ -340,8 +308,6 @@ public class SkillController : MonoBehaviour
             mentalCostMultipliers[slotType] = 1.0f;
         }
         mentalCostMultipliers[slotType] = 1.0f;
-        
-        Debug.Log($"[SkillController] {slotType} 슬롯 배율 리셋: 1.0");
     }
     
     #endregion

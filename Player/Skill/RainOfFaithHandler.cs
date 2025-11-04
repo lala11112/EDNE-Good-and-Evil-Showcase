@@ -3,10 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// 빗발치는 믿음 스킬 핸들러 (리워크)
-/// [1단계] 이동 경로에 잔상(도화선)을 무한으로 설치
-/// [2단계] 재입력 시 모든 잔상이 동시에 적을 향해 돌진 공격
-/// [특수] 다른 스킬 사용 시 자동 종료 + 잔상 모두 사라짐
+/// 빗발치는 믿음 스킬 핸들러
+/// 이동 경로에 잔상을 남겨 적을 공격합니다
 /// </summary>
 public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 {
@@ -22,70 +20,58 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("플레이어 컨트롤러")]
 	private PlayerController playerController;
 	
-	[Tooltip("스킬 슬롯 (쿨타임 시작용)")]
-	private SkillSlot skillSlot;
-	
 	#endregion
 	
-	#region 설치 모드
+	#region 이동속도 버프
 	
-	[Header("설치 모드 (1단계)")]
-	[Tooltip("설치 모드 활성화 여부")]
-	private bool isInSetupMode = false;
+	[Header("이동속도 버프")]
+	[Tooltip("랭크별 스킬 지속 시간 (초)")]
+	[SerializeField] private float[] durationByRank = new float[] { 3f, 3.5f, 4f, 4.5f, 5f };
 	
 	[Tooltip("랭크별 이동속도 증가 배율")]
 	[SerializeField] private float[] moveSpeedMultiplierByRank = new float[] { 1.3f, 1.35f, 1.4f, 1.5f, 1.6f };
 	
-	[Tooltip("원래 이동속도 (복원용)")]
+	private bool isActive = false;
+	private float remainingDuration = 0f;
 	private float originalMoveSpeed = 0f;
-	
-	[Tooltip("현재 랭크")]
 	private SkillRank currentRank;
 	
 	#endregion
 	
-	#region 잔상 생성 (도화선 설치)
+	#region 잔상 생성
 	
 	[Header("잔상 설정")]
-	[Tooltip("잔상 프리팹 (비활성 상태로 생성)")]
+	[Tooltip("잔상 프리팹")]
 	[SerializeField] private GameObject afterimagePrefab;
 	
 	[Tooltip("잔상 생성 간격 (초)")]
-	[SerializeField] private float afterimageSpawnInterval = 0.15f;
+	[SerializeField] private float afterimageSpawnInterval = 0.2f;
 	
 	[Tooltip("잔상 기본 데미지 퍼센트")]
-	[SerializeField] private float afterimageDamagePercent = 80f;
+	[SerializeField] private float afterimageDamagePercent = 50f;
 	
-	[Tooltip("폭발 시 잔상 공격 감지 거리")]
-	[SerializeField] private float afterimageAttackRange = 8f;
+	[Tooltip("랭크별 잔상 지속 시간 (초)")]
+	[SerializeField] private float[] afterimageLifetimeByRank = new float[] { 5f, 8f, 12f, 16f, 20f };
 	
-	[Tooltip("랭크별 잔상 최대 개수 제한 (0 = 무제한)")]
-	[SerializeField] private int[] maxAfterimagesByRank = new int[] { 0, 0, 0, 0, 0 }; // 무제한
+	[Tooltip("랭크별 최대 잔상 개수")]
+	[SerializeField] private int[] maxAfterimagesByRank = new int[] { 10, 15, 20, 25, 30 };
 	
-	[Tooltip("설치된 잔상 목록")]
-	private List<GameObject> installedAfterimages = new List<GameObject>();
-	
-	[Tooltip("마지막 잔상 생성 이후 경과 시간")]
+	private List<GameObject> activeAfterimages = new List<GameObject>();
 	private float timeSinceLastAfterimage = 0f;
 	
 	#endregion
 	
-	#region 폭발 모드 (2단계)
+	#region 정지 감지
 	
-	[Header("폭발 모드 (2단계)")]
-	[Tooltip("폭발 시 잔상 돌진 속도")]
-	[SerializeField] private float afterimageRushSpeed = 20f;
+	[Header("정지 감지")]
+	[Tooltip("정지 판정 시간 (초)")]
+	[SerializeField] private float stopThreshold = 0.3f;
 	
-	[Tooltip("폭발 시 연쇄 딜레이 (초, 동시 폭발 느낌)")]
-	[SerializeField] private float explosionChainDelay = 0.02f;
+	[Tooltip("정지 판정 최소 이동 거리")]
+	[SerializeField] private float minimumMovementDistance = 0.1f;
 	
-	#endregion
-	
-	#region 이동 추적
-	
-	[Header("이동 추적")]
-	[Tooltip("이전 위치 (잔상 생성 간격 체크용)")]
 	private Vector3 lastPosition;
+	private float timeSinceMovement = 0f;
 	
 	#endregion
 	
@@ -114,6 +100,12 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	
 	#endregion
 	
+	#region 코루틴 참조
+	
+	private Coroutine skillCoroutine;
+	
+	#endregion
+	
 	#region SkillHandlerInterface 구현
 	
 	/// <summary>
@@ -125,9 +117,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		this.owner = owner;
 		
 		// 리스트 초기화
-		if (installedAfterimages == null)
+		if (activeAfterimages == null)
 		{
-			installedAfterimages = new List<GameObject>();
+			activeAfterimages = new List<GameObject>();
 		}
 		
 		// PlayerController 찾기
@@ -152,23 +144,11 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			playerSpriteRenderer = playerController.GetComponentInChildren<SpriteRenderer>();
 		}
 		
-		// SkillSlot 찾기 (쿨타임 시작용)
-		skillSlot = GetComponentInParent<SkillSlot>();
-		if (skillSlot == null)
-		{
-			Debug.LogWarning("[RainOfFaithHandler] SkillSlot을 찾을 수 없습니다.");
-		}
-		
-		// 다른 스킬 사용 감지를 위한 이벤트 구독
-		SkillUIEvents.OnSkillUsed += OnOtherSkillUsed;
-		
 		Debug.Log("[RainOfFaithHandler] Setup 완료");
 	}
 	
 	/// <summary>
 	/// 스킬 사용
-	/// 1단계: 설치 모드 시작
-	/// 2단계 (재입력): 폭발 모드 실행
 	/// </summary>
 	public void Use(SkillRank rank)
 	{
@@ -178,21 +158,21 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// ⭐ 설치 모드가 활성화되어 있으면 → 폭발 모드 실행 (2단계)
-		if (isInSetupMode)
+		// 이미 활성화 중이면 무시
+		if (isActive)
 		{
-			Debug.Log($"[RainOfFaithHandler] ✨ 재입력 감지! 폭발 모드 시작! 설치된 잔상: {installedAfterimages.Count}개");
-			TriggerExplosion();
+			Debug.Log("[RainOfFaithHandler] 스킬이 이미 활성화 중입니다!");
 			return;
 		}
 		
-		// ⭐ 설치 모드가 비활성화되어 있으면 → 설치 모드 시작 (1단계)
+		// S랭크 모드 확인
 		isInSRankMode = (rank == SkillRank.S);
 		currentRank = rank;
 		
-		Debug.Log($"[RainOfFaithHandler] 🔧 설치 모드 시작 (랭크: {rank})");
+		Debug.Log($"[RainOfFaithHandler] 빗발치는 믿음 사용 (랭크: {rank})");
 		
-		StartSetupMode(rank);
+		// 스킬 시작
+		StartSkill(rank);
 	}
 	
 	/// <summary>
@@ -200,34 +180,44 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	public void Cleanup()
 	{
-		// 이벤트 구독 해제
-		SkillUIEvents.OnSkillUsed -= OnOtherSkillUsed;
-		
-		StopSetupMode();
+		StopSkill();
 		DestroyAllAfterimages();
 	}
 	
 	#endregion
 	
-	#region 설치 모드 (1단계)
+	#region 스킬 활성화/비활성화
 	
 	/// <summary>
-	/// 설치 모드 시작
+	/// 스킬 시작
 	/// </summary>
-	private void StartSetupMode(SkillRank rank)
+	private void StartSkill(SkillRank rank)
 	{
 		// 스킬 시작 효과음 재생
 		PlaySkillStartSound();
 		
-		isInSetupMode = true;
+		isActive = true;
+		
+		// 지속 시간 설정
+		int rankIndex = (int)rank;
+		
+		// 배열 안전성 체크
+		if (durationByRank == null || durationByRank.Length == 0)
+		{
+			Debug.LogError("[RainOfFaithHandler] durationByRank 배열이 비어있습니다!");
+			isActive = false;
+			return;
+		}
+		
+		remainingDuration = durationByRank[Mathf.Clamp(rankIndex, 0, durationByRank.Length - 1)];
 		
 		// 이동속도 버프 적용
-		int rankIndex = (int)rank;
 		float speedMultiplier = moveSpeedMultiplierByRank[Mathf.Clamp(rankIndex, 0, moveSpeedMultiplierByRank.Length - 1)];
 		ApplySpeedBuff(speedMultiplier);
 		
 		// 초기화
 		lastPosition = playerController.transform.position;
+		timeSinceMovement = 0f;
 		timeSinceLastAfterimage = 0f;
 		
 		// ⭐ 설치 모드 시작 시 0.5초 쿨타임 시작 (빠르게 폭발 가능)
@@ -236,115 +226,81 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			skillSlot.StartCooldownFromHandler(0.5f);
 			Debug.Log($"[RainOfFaithHandler] ⏰ 0.5초 쿨타임 시작! 빠르게 폭발 가능합니다.");
 		}
+		skillCoroutine = StartCoroutine(SkillCoroutine());
 		
-		Debug.Log($"[RainOfFaithHandler] 🔧 설치 모드 활성화 - 속도 배율: {speedMultiplier}x");
+		Debug.Log($"[RainOfFaithHandler] 스킬 시작 - 지속시간: {remainingDuration}초, 속도 배율: {speedMultiplier}x");
 	}
 	
 	/// <summary>
-	/// 설치 모드 종료
+	/// 스킬 종료
 	/// </summary>
-	private void StopSetupMode()
+	private void StopSkill()
 	{
-		if (!isInSetupMode) return;
+		if (!isActive) return;
 		
-		isInSetupMode = false;
+		isActive = false;
 		isInSRankMode = false;
 		
 		// 이동속도 버프 제거
 		RemoveSpeedBuff();
 		
-		Debug.Log("[RainOfFaithHandler] 🔧 설치 모드 종료");
+		// 코루틴 정지
+		if (skillCoroutine != null)
+		{
+			StopCoroutine(skillCoroutine);
+			skillCoroutine = null;
+		}
+		
+		Debug.Log("[RainOfFaithHandler] 스킬 종료");
 	}
 	
 	#endregion
 	
-	#region Update (잔상 생성)
+	#region 스킬 코루틴
 	
 	/// <summary>
-	/// 매 프레임 업데이트: 설치 모드에서 잔상 생성
+	/// 스킬 메인 루프
 	/// </summary>
-	private void Update()
+	private IEnumerator SkillCoroutine()
 	{
-		if (!isInSetupMode || playerController == null) return;
-		
-		// 이동 확인
-		Vector3 currentPosition = playerController.transform.position;
-		float distanceMoved = Vector3.Distance(currentPosition, lastPosition);
-		
-		// 잔상 생성 타이머 증가
-		timeSinceLastAfterimage += Time.deltaTime;
-		
-		// 최소 이동 거리 이상 이동 + 일정 시간 경과 시 잔상 생성
-		if (distanceMoved >= 0.1f && timeSinceLastAfterimage >= afterimageSpawnInterval)
+		while (remainingDuration > 0f && isActive)
 		{
-			InstallAfterimage(currentPosition);
-			lastPosition = currentPosition;
-			timeSinceLastAfterimage = 0f;
-		}
-	}
-	
-	#endregion
-	
-	#region 폭발 모드 (2단계)
-	
-	/// <summary>
-	/// 폭발 모드 실행: 모든 잔상이 동시에 적을 향해 돌진 공격
-	/// </summary>
-	private void TriggerExplosion()
-	{
-		if (installedAfterimages.Count == 0)
-		{
-			Debug.LogWarning("[RainOfFaithHandler] ⚠️ 설치된 잔상이 없습니다!");
-			StopSetupMode();
+			remainingDuration -= Time.deltaTime;
 			
-			// 잔상이 없으면 원래 쿨타임 시작
-			if (skillSlot != null)
+			// 이동 확인
+			Vector3 currentPosition = playerController.transform.position;
+			float distanceMoved = Vector3.Distance(currentPosition, lastPosition);
+			
+			// ⭐ 잔상 생성 타이머는 항상 증가
+			timeSinceLastAfterimage += Time.deltaTime;
+			
+			if (distanceMoved >= minimumMovementDistance)
 			{
-				skillSlot.StartCooldownFromHandler();
-				Debug.Log($"[RainOfFaithHandler] ⏰ 잔상 없음 - 정상 쿨타임 시작");
+				// 이동 중
+				timeSinceMovement = 0f;
+				lastPosition = currentPosition;
+				
+				// 잔상 생성 (이동 중일 때만)
+				if (timeSinceLastAfterimage >= afterimageSpawnInterval)
+				{
+					SpawnAfterimage(currentPosition);
+					timeSinceLastAfterimage = 0f;
+				}
 			}
-			return;
-		}
-		
-		Debug.Log($"[RainOfFaithHandler] 💥 폭발 시작! 총 {installedAfterimages.Count}개의 잔상이 적을 공격합니다!");
-		
-		// 설치 모드 종료
-		StopSetupMode();
-		
-		// 연쇄 폭발 코루틴 시작
-		StartCoroutine(ExplosionSequence());
-		
-		// ⭐ 폭발 후 원래 스킬의 쿨타임 시작
-		if (skillSlot != null)
-		{
-			skillSlot.StartCooldownFromHandler();
-			Debug.Log($"[RainOfFaithHandler] 💥 폭발 완료! 원래 쿨타임 시작 ({skillData?.cooldown ?? 0}초)");
-		}
-	}
-	
-	/// <summary>
-	/// 폭발 연쇄 시퀀스
-	/// </summary>
-	private IEnumerator ExplosionSequence()
-	{
-		// 모든 잔상 활성화 (동시에, 약간의 딜레이로 연쇄 느낌)
-		for (int i = 0; i < installedAfterimages.Count; i++)
-		{
-			GameObject afterimageObj = installedAfterimages[i];
-			if (afterimageObj == null) continue;
-			
-			AfterimageController afterimage = afterimageObj.GetComponent<AfterimageController>();
-			if (afterimage != null)
+			else
 			{
-				// 잔상 활성화 (적 향해 돌진 시작)
-				afterimage.ActivateAndAttack(afterimageAttackRange, afterimageRushSpeed);
+				// 정지 중
+				timeSinceMovement += Time.deltaTime;
+				
+				// 정지 시간 초과 시 스킬 종료
+				if (timeSinceMovement >= stopThreshold)
+				{
+					Debug.Log("[RainOfFaithHandler] 플레이어가 멈춰서 스킬 조기 종료");
+					break;
+				}
 			}
 			
-			// 연쇄 딜레이
-			if (explosionChainDelay > 0f)
-			{
-				yield return new WaitForSeconds(explosionChainDelay);
-			}
+			yield return null;
 		}
 		
 		// 잔상 목록 초기화
@@ -380,6 +336,8 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			skillSlot.StartCooldownFromHandler();
 			Debug.Log($"[RainOfFaithHandler] ⏰ 자동 종료 - 원래 쿨타임 시작");
 		}
+		// 스킬 종료
+		StopSkill();
 	}
 	
 	#endregion
@@ -416,9 +374,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	#region 잔상 관리
 	
 	/// <summary>
-	/// 잔상 설치 (비활성 상태로 생성)
+	/// 잔상 생성
 	/// </summary>
-	private void InstallAfterimage(Vector3 position)
+	private void SpawnAfterimage(Vector3 position)
 	{
 		if (afterimagePrefab == null)
 		{
@@ -426,29 +384,33 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// 최대 개수 체크 (0 = 무제한)
+		// 최대 개수 체크
 		int rankIndex = (int)currentRank;
 		int maxCount = maxAfterimagesByRank[Mathf.Clamp(rankIndex, 0, maxAfterimagesByRank.Length - 1)];
 		
-		if (maxCount > 0 && installedAfterimages.Count >= maxCount)
+		// 오래된 잔상 제거
+		CleanupDestroyedAfterimages();
+		while (activeAfterimages.Count >= maxCount)
 		{
-			// 최대 개수 도달 → 가장 오래된 잔상 제거
-			CleanupDestroyedAfterimages();
-			if (installedAfterimages.Count >= maxCount && installedAfterimages.Count > 0)
+			if (activeAfterimages.Count > 0)
 			{
-				GameObject oldest = installedAfterimages[0];
-				installedAfterimages.RemoveAt(0);
+				GameObject oldest = activeAfterimages[0];
+				activeAfterimages.RemoveAt(0);
 				if (oldest != null)
 				{
 					Destroy(oldest);
 				}
+			}
+			else
+			{
+				break;
 			}
 		}
 		
 		// 잔상 생성 효과음 재생 (볼륨을 낮게)
 		PlayAfterimageSpawnSound();
 		
-		// 잔상 생성 (비활성 상태)
+		// 잔상 생성
 		GameObject afterimageObj = Instantiate(afterimagePrefab, position, Quaternion.identity);
 		AfterimageController afterimage = afterimageObj.GetComponent<AfterimageController>();
 		
@@ -459,15 +421,16 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			float damageMultiplier = skillData.GetDamageMultiplier(currentRank);
 			float finalDamage = baseDamage * damageMultiplier;
 			
+			// 잔상 지속 시간
+			float lifetime = afterimageLifetimeByRank[Mathf.Clamp(rankIndex, 0, afterimageLifetimeByRank.Length - 1)];
+			
 			// 플레이어 스프라이트
 			Sprite playerSprite = (playerSpriteRenderer != null) ? playerSpriteRenderer.sprite : null;
 			
-			// 초기화 (비활성 상태로)
-			afterimage.SetupAsInactive(finalDamage, isInSRankMode, playerSprite);
+			// 초기화
+			afterimage.Setup(finalDamage, lifetime, isInSRankMode, playerSprite);
 			
-			installedAfterimages.Add(afterimageObj);
-			
-			Debug.Log($"[RainOfFaithHandler] 🔧 잔상 설치 완료! 총 {installedAfterimages.Count}개");
+			activeAfterimages.Add(afterimageObj);
 		}
 	}
 	
@@ -476,7 +439,7 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void CleanupDestroyedAfterimages()
 	{
-		installedAfterimages.RemoveAll(a => a == null);
+		activeAfterimages.RemoveAll(a => a == null);
 	}
 	
 	/// <summary>
@@ -484,16 +447,14 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void DestroyAllAfterimages()
 	{
-		foreach (GameObject afterimage in installedAfterimages)
+		foreach (GameObject afterimage in activeAfterimages)
 		{
 			if (afterimage != null)
 			{
 				Destroy(afterimage);
 			}
 		}
-		installedAfterimages.Clear();
-		
-		Debug.Log("[RainOfFaithHandler] 🗑️ 모든 잔상 제거");
+		activeAfterimages.Clear();
 	}
 	
 	#endregion

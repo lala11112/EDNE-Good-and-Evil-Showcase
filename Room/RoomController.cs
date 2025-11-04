@@ -171,6 +171,9 @@ public class RoomController : MonoBehaviour
         if(isRoomFirstEntered) return;
         PlayerController playerController = other.GetComponent<PlayerController>();
         if(playerController != null){
+            // ⭐ 용기 시스템: PlayerController에 현재 방 설정
+            playerController.SetCurrentRoomController(this);
+            
             EnterRoom();
         }
     }
@@ -452,6 +455,8 @@ public class RoomController : MonoBehaviour
         // 보상 지급
         GiveRewards();
 
+        // ⭐ 용기 시스템: PlayerController에 방 클리어 알림 (OnRoomCleared에서 처리됨)
+        
         OnRoomCleared?.Invoke(this);
         Debug.Log($"[RoomController] {roomData.roomName} 클리어!");
     }
@@ -472,11 +477,10 @@ public class RoomController : MonoBehaviour
             currentMonsters.Add(monster);
             Debug.Log($"[RoomController] 몬스터 등록: {monster.name} (총 {currentMonsters.Count}마리)");
             
-            // 등록된 몬스터 목록 출력
-            Debug.Log($"[RoomController] 현재 등록된 몬스터 목록:");
-            for (int i = 0; i < currentMonsters.Count; i++)
+            // ⭐ 용기 시스템: PlayerController에 몬스터 죽음 이벤트 구독 요청
+            if (PlayerController.Instance != null)
             {
-                Debug.Log($"  {i + 1}. {currentMonsters[i]?.name ?? "null"}");
+                PlayerController.Instance.SubscribeMonsterDeathEvent(monster);
             }
         }
         else

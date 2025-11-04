@@ -22,7 +22,12 @@ public enum StatusEffectType
 
 public enum CourageState
 {
-    Despair, anxiety, doubt, courage, determination, confidence
+    Despair,    // 절망
+    Anxiety,    // 불안
+    Doubt,      // 의심
+    Courage,    // 용기
+    Determination,  // 결의
+    Confidence  // 확신
 }
 
 public enum PlayerSkillRank

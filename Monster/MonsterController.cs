@@ -29,23 +29,6 @@ public partial class MonsterController : EntityController
     private RoomController roomController;  // 이 몬스터가 속한 방 컨트롤러
     #endregion
     
-    #region Hit Effect - 피격 효과
-    [Header("피격 효과 설정")]
-    [Tooltip("피격 시 변경될 색상")]
-    [SerializeField] private Color hitColor = Color.red;
-    
-    [Tooltip("피격 효과 지속 시간(초)")]
-    [SerializeField] private float hitEffectDuration = 0.3f;
-    
-    [Tooltip("깜빡임 효과 사용 여부")]
-    [SerializeField] private bool useBlinkEffect = true;
-    
-    [Tooltip("깜빡임 주기 (초) - 작을수록 빠르게 깜빡임")]
-    [SerializeField] private float blinkInterval = 0.1f;
-    
-    private Coroutine hitEffectCoroutine; // 피격 효과 코루틴 참조
-    #endregion
-    
     #region Runtime Variables - 런타임 상태
     private bool isMovementEnabled = true;
     private float movementLockTimer = 0f; // 이동 잠금 타이머
@@ -54,6 +37,10 @@ public partial class MonsterController : EntityController
     private float runtimeDetectionRange;
     private float runtimeStopDistance;
     private float runtimeMoveSpeed;
+    
+    // ⭐ 용기 시스템용: 마지막 데미지를 준 스킬 타입
+    private SkillSlotType? lastDamageSkillSlotType = null;
+    private DamageSourceType lastDamageSourceType = DamageSourceType.Environment;
     #endregion
     
     #region Properties - 외부 접근용
@@ -251,64 +238,26 @@ public partial class MonsterController : EntityController
     {
         base.OnDamaged(damageAmount, damageSource);
         
-        // 피격 애니메이션
-        if (animator != null)
+        // ⭐ 용기 시스템용: 데미지 소스에서 SkillSlotType 추출
+        DamageSourceInfo damageInfo = DamageSourceInfo.FromDamageSource(damageSource);
+        if (damageInfo.skillSlotType.HasValue)
         {
-            animator.SetTrigger("OnDamage");
-        }
-        
-        // ⭐ 피격 깜빡임 효과
-        if (spriteRenderer != null)
-        {
-            // 기존 효과가 실행 중이면 중지
-            if (hitEffectCoroutine != null)
-            {
-                StopCoroutine(hitEffectCoroutine);
-            }
-            
-            hitEffectCoroutine = StartCoroutine(HitEffect());
-        }
-        
-        Debug.Log($"[MonsterController] {gameObject.name}가 {damageAmount} 데미지를 받음 (남은 HP: {currentHealth}/{MaxHealth})");
-    }
-    
-    /// <summary>
-    /// 피격 시 색상 변경 효과 (깜빡임)
-    /// </summary>
-    private System.Collections.IEnumerator HitEffect()
-    {
-        if (spriteRenderer == null) yield break;
-
-        // 원래 색상 저장
-        Color originalColor = spriteRenderer.color;
-
-        if (useBlinkEffect)
-        {
-            // 깜빡임 효과
-            float elapsed = 0f;
-            bool isHitColor = false;
-
-            while (elapsed < hitEffectDuration)
-            {
-                // 색상 토글
-                isHitColor = !isHitColor;
-                spriteRenderer.color = isHitColor ? hitColor : originalColor;
-
-                // 깜빡임 주기만큼 대기
-                yield return new WaitForSeconds(blinkInterval);
-                elapsed += blinkInterval;
-            }
+            lastDamageSkillSlotType = damageInfo.skillSlotType.Value;
+            lastDamageSourceType = damageInfo.sourceType;
+            Debug.Log($"[MonsterController] {gameObject.name}가 {damageInfo.skillSlotType.Value} 스킬로 데미지 받음");
         }
         else
         {
-            // 단순 색상 변경 (기존 방식)
-            spriteRenderer.color = hitColor;
-            yield return new WaitForSeconds(hitEffectDuration);
+            lastDamageSourceType = damageInfo.sourceType;
         }
-
-        // 원래 색상으로 복원
-        spriteRenderer.color = originalColor;
-        hitEffectCoroutine = null;
+        
+        // 몬스터 피격 반응
+        // TODO: 나중에 구현
+        // PlayHitAnimation();
+        // PlayHitSound();
+        // ShowDamagePopup(damageAmount);
+        
+        Debug.Log($"[MonsterController] {gameObject.name}가 {damageAmount} 데미지를 받음 (남은 HP: {currentHealth}/{MaxHealth})");
     }
     
     /// <summary>
@@ -357,6 +306,19 @@ public partial class MonsterController : EntityController
         
         Debug.Log($"[MonsterController] {gameObject.name} OnMonsterDied.Invoke() 호출 직전");
         OnMonsterDied?.Invoke(this);
+        
+        // ⭐ 용기 시스템용: 사망 시 마지막 데미지를 준 스킬 타입 전달
+        if (lastDamageSkillSlotType.HasValue)
+        {
+            OnMonsterKilledBySkill?.Invoke(this, lastDamageSkillSlotType.Value, lastDamageSourceType);
+            Debug.Log($"[MonsterController] {gameObject.name}이 {lastDamageSkillSlotType.Value} 스킬로 처치됨 (소스 타입: {lastDamageSourceType})");
+        }
+        else
+        {
+            OnMonsterKilledBySkill?.Invoke(this, null, lastDamageSourceType);
+            Debug.Log($"[MonsterController] {gameObject.name}이 스킬이 아닌 방법으로 처치됨 (소스 타입: {lastDamageSourceType})");
+        }
+        
         Debug.Log($"[MonsterController] {gameObject.name} OnMonsterDied.Invoke() 호출 완료");
         
         // TODO: 죽음 애니메이션, 이펙트 등
@@ -375,7 +337,16 @@ public partial class MonsterController : EntityController
     }
 
     // 이벤트
+    /// <summary>
+    /// 몬스터 사망 이벤트 (기존)
+    /// </summary>
     public System.Action<MonsterController> OnMonsterDied;
+    
+    /// <summary>
+    /// 몬스터가 스킬로 처치되었을 때 발생하는 이벤트 (용기 시스템용)
+    /// 파라미터: (MonsterController, SkillSlotType?, DamageSourceType)
+    /// </summary>
+    public System.Action<MonsterController, SkillSlotType?, DamageSourceType> OnMonsterKilledBySkill;
     
     #endregion
     

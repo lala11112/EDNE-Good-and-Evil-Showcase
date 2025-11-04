@@ -39,7 +39,7 @@ public class AOEDamage : MonoBehaviour
             }
             
             // 데미지 적용 시도 (팀킬 방지 포함)
-            bool damageApplied = target.ApplyDamage((int)damage, attackerType);
+            bool damageApplied = target.ApplyDamage((int)damage, attackerType, this);
             
             if (damageApplied)
             {
