@@ -157,41 +157,4 @@ public class PlayerDataSO : EntityDataSO
     public float perfectDodgeJudgmentDuration = 0.3f;
     
     #endregion
-    
-    #region 사망 이펙트
-    
-    [Header("=== 사망 이펙트 (Death Effect) ===")]
-    [Tooltip("플레이어 사망 시 생성될 이펙트 프리팹 (파티클, 애니메이션 등)")]
-    public GameObject deathEffectPrefab;
-    
-    [Tooltip("사망 이펙트 지속 시간 (초) - 자동 삭제")]
-    public float deathEffectDuration = 3f;
-    
-    [Tooltip("사망 사운드 효과음")]
-    public AudioClip deathSound;
-    
-    [Tooltip("사망 시 카메라 쉐이크 강도 (0 = 없음)")]
-    [Range(0f, 10f)]
-    public float deathCameraShakeStrength = 5f;
-    
-    #endregion
-    
-    #region 피격 무적 시간
-    
-    [Header("=== 피격 무적 시간 (Hit Invincibility) ===")]
-    [Tooltip("피격 시 무적 지속 시간 (초) - 연속 피격 방지")]
-    [Range(0f, 2f)]
-    public float hitInvincibilityDuration = 0.3f;
-    
-    [Tooltip("무적 중 스프라이트 깜빡임 효과 사용 여부")]
-    public bool useBlinkEffect = true;
-    
-    [Tooltip("깜빡임 주기 (초) - 작을수록 빠르게 깜빡임")]
-    [Range(0.05f, 0.5f)]
-    public float blinkInterval = 0.1f;
-    
-    [Tooltip("무적 중 피격 색상 (빨간색 등)")]
-    public Color hitColor = Color.red;
-    
-    #endregion
 }

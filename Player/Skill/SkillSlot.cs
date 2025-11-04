@@ -274,22 +274,4 @@ public class SkillSlot : MonoBehaviour
     {
         StartCooldown();
     }
-    
-    /// <summary>
-    /// 쿨타임 강제 종료 (즉시 재사용 가능하게 만듦)
-    /// 용기의 질주처럼 적 충돌 시 즉시 재사용 가능하게 만들 때 사용
-    /// </summary>
-    public void ResetCooldown()
-    {
-        if (isOnCooldown)
-        {
-            currentCooldown = 0f;
-            isOnCooldown = false;
-            
-            // 쿨타임 종료 이벤트 발생
-            SkillUIEvents.InvokeCooldownEnded(slotType);
-            
-            Debug.Log($"[SkillSlot] {currentSkillData?.skillName ?? "Unknown"} 쿨타임 강제 초기화! 즉시 재사용 가능!");
-        }
-    }
 }
