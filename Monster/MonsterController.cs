@@ -254,6 +254,30 @@ public partial class MonsterController : EntityController
             navAgent.enabled = false;
         }
         
+        // ⭐ 충돌 비활성화: 사망 후 플레이어/오브젝트와 충돌하지 않도록 Collider 및 물리 비활성화
+        // 2D Collider 전부 비활성화
+        var colliders2D = GetComponentsInChildren<Collider2D>(false);
+        for (int i = 0; i < colliders2D.Length; i++)
+        {
+            colliders2D[i].enabled = false;
+        }
+        
+        // 3D Collider가 섞여 있을 경우 대비해 함께 비활성화
+        var colliders3D = GetComponentsInChildren<Collider>(false);
+        for (int i = 0; i < colliders3D.Length; i++)
+        {
+            colliders3D[i].enabled = false;
+        }
+        
+        // 물리 시뮬레이션 중지 (2D)
+        var rigidbody2D = GetComponentInChildren<Rigidbody2D>();
+        if (rigidbody2D != null)
+        {
+            rigidbody2D.linearVelocity = Vector2.zero;
+            rigidbody2D.angularVelocity = 0f;
+            rigidbody2D.simulated = false;
+        }
+        
         // ⭐ 죽음 이벤트 발생 (EnemyDeathEventSystem이 있다면 자동으로 감지됨)
         Debug.Log($"[MonsterController] {gameObject.name}의 죽음이 EnemyDeathEventSystem에 의해 감지됩니다.");
         

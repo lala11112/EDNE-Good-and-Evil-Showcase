@@ -17,6 +17,12 @@ public class FiaballSurroundShotHandler : MonoBehaviour, SkillHandlerInterface
 	[Header("배치 설정")]
 	[Tooltip("플레이어 주변에 배치할 탄 개수")] 
 	[SerializeField] private int projectileCount = 8;
+	[Tooltip("매 발사마다 탄 개수를 [최소,최대]에서 랜덤으로 선택")]
+	[SerializeField] private bool useRandomCount = false;
+	[Tooltip("랜덤 탄 개수 최소값 (useRandomCount=true일 때 사용)")]
+	[SerializeField] private int minProjectileCount = 6;
+	[Tooltip("랜덤 탄 개수 최대값 (useRandomCount=true일 때 사용)")]
+	[SerializeField] private int maxProjectileCount = 12;
 	[Tooltip("배치 반지름 (플레이어 중심에서의 거리)")] 
 	[SerializeField] private float radius = 3f;
 	[Tooltip("배치 각도 오프셋 (도)")] 
@@ -94,7 +100,18 @@ public class FiaballSurroundShotHandler : MonoBehaviour, SkillHandlerInterface
 			yield break;
 		}
 
-		int count = Mathf.Max(1, projectileCount);
+		// 매 발사 시 탄 개수 결정 (정수, [min,max] 랜덤 또는 고정)
+		int count;
+		if (useRandomCount)
+		{
+			int minC = Mathf.Max(1, minProjectileCount);
+			int maxC = Mathf.Max(minC, maxProjectileCount);
+			count = Random.Range(minC, maxC + 1);
+		}
+		else
+		{
+			count = Mathf.Max(1, projectileCount);
+		}
 		float speed = skillData != null ? skillData.projectileSpeed : 10f;
 		int damage = skillData != null ? Mathf.RoundToInt(skillData.damage) : 10;
 

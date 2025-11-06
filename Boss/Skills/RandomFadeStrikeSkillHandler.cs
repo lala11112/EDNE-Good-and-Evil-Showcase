@@ -26,17 +26,39 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
     [SerializeField] private bool searchWholeScene = false;
 
     [Header("페이드 타이밍 (초)")]
-    [SerializeField] private float fadeInDuration = 0.8f;
+	[Tooltip("0 → 1로 투명도 올리는 시간(초). 텔레그래프/예고 연출 구간")]
+	[SerializeField] private float fadeInDuration = 0.8f;
+	[Tooltip("미리보기(반투명) 텔레그래프를 일정 시간 보여준 뒤 1로 순간 전환하며 타격")]
+	[SerializeField] private bool usePreviewHold = false;
+	[Tooltip("usePreviewHold가 켜져 있을 때 미리보기 알파(0~1)")]
+	[SerializeField] [Range(0f,1f)] private float previewAlpha = 0.35f;
+	[Tooltip("usePreviewHold가 켜져 있을 때 미리보기 유지 시간(초)")]
+	[SerializeField] private float previewHoldDuration = 2f;
+	[Tooltip("켜면 0 상태를 instantRiseDelay 동안 유지한 뒤 즉시 1로 점프합니다 (fade 무시)")]
+	[SerializeField] private bool useInstantRise = false;
+	[Tooltip("useInstantRise가 켜져 있을 때 0에서 대기하는 시간(초) 후 즉시 1로 전환")]
+	[SerializeField] private float instantRiseDelay = 0f;
+    [Tooltip("최대 밝기(알파=1)에서 유지하는 시간(초). 이 구간 직후 피해 적용")]
     [SerializeField] private float holdAtPeakDuration = 0.0f;
+    [Tooltip("피해 적용 후 1 → 0으로 사라지는 시간(초)")]
     [SerializeField] private float fadeOutDuration = 0.5f;
 
     [Header("피해 설정")]
     private int damageAmount = 0; // MonsterSkillData.damage에서 세팅
+    [Tooltip("피해를 줄 대상 레이어 마스크 (플레이어/동맹 등 대상 선택)")]
     [SerializeField] private LayerMask damageLayerMask;
 
     [Header("비주얼")]
-    [Tooltip("페이드 동안 적용할 색상 (빨간색 권장)")]
+    [Tooltip("(2단계 모드 미사용 시) 페이드 동안 적용할 단일 색상")]
     [SerializeField] private Color effectTintColor = new Color(1f, 0f, 0f, 1f);
+    [Tooltip("2단계 색상 모드: 반투명 경고색 → 데미지색으로 순간 전환")]
+    [SerializeField] private bool useTwoStageColorMode = true;
+    [Tooltip("경고(데미지 없음) 단계 색상. 알파 포함 (예: 반투명 빨간색)")]
+    [SerializeField] private Color telegraphColor = new Color(1f, 0f, 0f, 0.35f);
+    [Tooltip("경고 단계 유지 시간(초). 이후 데미지색으로 전환하며 타격")]
+    [SerializeField] private float telegraphDuration = 2f;
+    [Tooltip("데미지 단계 색상 (예: 노란색, 알파=1 권장)")]
+    [SerializeField] private Color damageColor = new Color(1f, 0.92f, 0.16f, 1f);
 
     [Header("초기화 설정")]
     [Tooltip("시작 시 모든 타겟의 알파를 0으로 강제 설정합니다.")]
@@ -164,16 +186,25 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
             SetColorAlpha(spriteRenderers[i], effectTintColor, 0f);
         }
 
-        yield return FadeSpritesTinted(spriteRenderers, 0f, 1f, Mathf.Max(0f, fadeInDuration), effectTintColor);
-
-        if (holdAtPeakDuration > 0f)
+        // 단일 플로우: 경고(반투명 빨강) → 대기 → 데미지(노랑) → 유지
+        for (int i = 0; i < spriteRenderers.Length; i++)
         {
-            yield return new WaitForSeconds(holdAtPeakDuration);
+            spriteRenderers[i].color = telegraphColor; // 데미지 없음
         }
+        if (telegraphDuration > 0f) yield return new WaitForSeconds(telegraphDuration);
 
+        for (int i = 0; i < spriteRenderers.Length; i++)
+        {
+            spriteRenderers[i].color = damageColor; // 전환과 동시에 타격
+        }
         ApplyDamageOnColliders(selected);
 
-        yield return FadeSpritesTinted(spriteRenderers, 1f, 0f, Mathf.Max(0f, fadeOutDuration), effectTintColor);
+        if (holdAtPeakDuration > 0f) yield return new WaitForSeconds(holdAtPeakDuration);
+
+        // 타격은 전환 시점에 이미 처리됨
+
+        // 사라질 때는 데미지색 기준으로 알파만 0으로 페이드
+        yield return FadeSpritesTinted(spriteRenderers, 1f, 0f, Mathf.Max(0f, fadeOutDuration), damageColor);
 
         for (int i = 0; i < spriteRenderers.Length; i++)
         {
