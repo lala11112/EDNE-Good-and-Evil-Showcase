@@ -9,9 +9,11 @@ using UnityEngine;
 public partial class BossController : EntityController
 {
 	#region Inspector - Skill Slots
-	[Header("보스 스킬 슬롯 (순차 사용)")]
-	[Tooltip("보스가 순차적으로 사용할 스킬 슬롯 목록입니다. 인덱스 순서대로 반복 실행됩니다.")]
-	[SerializeField] private BossSkillSlot[] skillSlots;
+	[SerializeField, HideInInspector] private BossSkillSlot[] skillSlots;
+
+	[Header("페이즈별 스킬 세트 (선택)")]
+	[Tooltip("페이즈별로 사용할 슬롯 세트입니다. 0=초기 페이즈, 트리거 완료 수 만큼 증가")]
+	[SerializeField] private BossPhaseSkillSet[] phaseSkillSets;
 
 	[Header("스킬 시스템 토글")]
 	[Tooltip("보스 스킬 시스템 활성/비활성")]
@@ -47,6 +49,7 @@ public partial class BossController : EntityController
     private int currentRepeatingPhaseIndex = -1; // 반복 중인 페이즈 인덱스 (-1이면 없음)
     private bool isPhaseInvincibleActive = false; // 페이즈 반복 동안 무적 유지
     private int invinciblePhaseIndex = -1; // 무적 유지중인 페이즈 인덱스
+	private int currentPhaseIndex = 0; // 현재 페이즈 인덱스 (phaseSkillSets 사용 시)
 	#endregion
 
 	#region Unity Lifecycle
@@ -69,16 +72,14 @@ public partial class BossController : EntityController
 
 	private void InitializeBossSkills()
 	{
-        if (skillSlots != null && skillSlots.Length > 0)
-        {
-            slotCooldownTimers = new float[skillSlots.Length];
-            slotRepeatRemaining = new int[skillSlots.Length];
-            for (int i = 0; i < slotCooldownTimers.Length; i++)
-            {
-                slotCooldownTimers[i] = 0f;
-                slotRepeatRemaining[i] = 0;
-            }
-        }
+		// 페이즈 세트가 지정되어 있으면 0페이즈 세트를 현재 슬롯으로 설정
+		if (phaseSkillSets != null && phaseSkillSets.Length > 0 && phaseSkillSets[0] != null && phaseSkillSets[0].skillSlots != null && phaseSkillSets[0].skillSlots.Length > 0)
+		{
+			currentPhaseIndex = 0;
+			skillSlots = phaseSkillSets[0].skillSlots;
+		}
+
+		RebuildSlotRuntimeArrays();
 
 		if (phaseTriggers != null && phaseTriggers.Length > 0)
 		{
@@ -90,6 +91,26 @@ public partial class BossController : EntityController
                 phaseRepeatRemaining[i] = 0;
 			}
 		}
+	}
+
+	private void RebuildSlotRuntimeArrays()
+	{
+		if (skillSlots != null && skillSlots.Length > 0)
+		{
+			slotCooldownTimers = new float[skillSlots.Length];
+			slotRepeatRemaining = new int[skillSlots.Length];
+			for (int i = 0; i < slotCooldownTimers.Length; i++)
+			{
+				slotCooldownTimers[i] = 0f;
+				slotRepeatRemaining[i] = 0;
+			}
+		}
+		else
+		{
+			slotCooldownTimers = new float[0];
+			slotRepeatRemaining = new int[0];
+		}
+		nextSlotIndex = 0;
 	}
 	#endregion
 
@@ -357,8 +378,40 @@ public partial class BossController : EntityController
             isPhaseInvincibleActive = false;
             invinciblePhaseIndex = -1;
         }
+        // 페이즈 스킬 완료 후 다음 페이즈 스킬 세트로 전환 (phaseSkillSets 사용 시)
+        TryAdvancePhaseSkillSet();
+
         nextAnySkillAllowedAt = Time.time + Mathf.Max(0f, globalSkillGap);
     }
+
+	private void TryAdvancePhaseSkillSet()
+	{
+		if (phaseSkillSets == null || phaseSkillSets.Length == 0) return;
+		// 발동 완료된 트리거 수를 새 페이즈 인덱스로 사용 (0부터 시작)
+		int firedCount = 0;
+		if (phaseFired != null)
+		{
+			for (int i = 0; i < phaseFired.Length; i++)
+			{
+				if (phaseFired[i]) firedCount++;
+			}
+		}
+		int desiredPhase = Mathf.Clamp(firedCount, 0, phaseSkillSets.Length - 1);
+		if (desiredPhase != currentPhaseIndex)
+		{
+			var set = phaseSkillSets[desiredPhase];
+			if (set != null && set.skillSlots != null && set.skillSlots.Length > 0)
+			{
+				currentPhaseIndex = desiredPhase;
+				skillSlots = set.skillSlots;
+				RebuildSlotRuntimeArrays();
+				if (debugSkillLogs)
+				{
+					Debug.Log($"[BossController] Advanced to phase {currentPhaseIndex}. Switched skill set.");
+				}
+			}
+		}
+	}
 
 	private void UseSkillWithHandler(MonsterSkillData skill, System.Action onEnd = null)
 	{
@@ -527,6 +580,16 @@ public class BossPhaseTrigger
 	{
 		return phaseSkill != null;
 	}
+}
+
+[System.Serializable]
+public class BossPhaseSkillSet
+{
+	[Header("페이즈 이름 (선택)")]
+	public string phaseName;
+
+	[Header("해당 페이즈에서 사용할 슬롯들")]
+	public BossSkillSlot[] skillSlots;
 }
 
 
