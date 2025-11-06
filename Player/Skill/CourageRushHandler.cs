@@ -243,10 +243,17 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private IEnumerator ExecuteDash(SkillRank rank)
 	{
-		// 0. 충돌한 적 목록 초기화
+		// 0. 대쉬 애니메이션 재생 (Attack2)
+		if (playerController != null)
+		{
+			playerController.PlayAttackAnimation(2);
+			Debug.Log("[CourageRushHandler] 대쉬 애니메이션 재생 (Attack2)");
+		}
+		
+		// 0-1. 충돌한 적 목록 초기화
 		hitEnemiesDuringDash.Clear();
 		
-		// 0-1. 대쉬 시작 효과음 재생
+		// 0-2. 대쉬 시작 효과음 재생
 		PlayDashStartSound();
 		
 		// 1. Rigidbody2D 가져오기 및 물리 상태 초기화

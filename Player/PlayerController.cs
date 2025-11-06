@@ -99,6 +99,14 @@ public class PlayerController : EntityController
 	private Coroutine blinkCoroutine;
 
 	#endregion
+	
+	#region 런타임 상태 - 애니메이션
+	
+	[Header("애니메이션 트리거")]
+	[Tooltip("현재 재생 중인 공격 애니메이션이 있는지 여부")]
+	private bool isPlayingAttackAnimation = false;
+
+	#endregion
 
 	#region 런타임 상태 - 넉백
 
@@ -695,6 +703,8 @@ public class PlayerController : EntityController
 	}
 
 	/// <summary>
+	/// 애니메이터 파라미터 및 스프라이트 방향 업데이트
+	/// </summary>
 	private void UpdateAnimatorParameters()
 	{
 		if (animator == null) return;
@@ -705,6 +715,32 @@ public class PlayerController : EntityController
 		animator.SetBool("isMove", isMoving);
 		animator.SetFloat("InputX", dir.x);
 		animator.SetFloat("InputY", dir.y);
+		
+		// ⭐ 스프라이트 방향 전환 (왼쪽/오른쪽)
+		UpdateSpriteDirection(dir);
+	}
+	
+	/// <summary>
+	/// 스프라이트 방향 전환 (좌우 반전)
+	/// </summary>
+	/// <param name="direction">현재 이동 방향</param>
+	private void UpdateSpriteDirection(Vector2 direction)
+	{
+		if (spriteRenderer == null) return;
+		
+		// X 방향이 거의 0이면 방향 전환하지 않음 (위/아래 이동 시)
+		if (Mathf.Abs(direction.x) < 0.01f) return;
+		
+		// 왼쪽으로 이동 시 스프라이트 반전
+		if (direction.x < 0)
+		{
+			spriteRenderer.flipX = true; // 왼쪽 보기
+		}
+		// 오른쪽으로 이동 시 스프라이트 원래대로
+		else if (direction.x > 0)
+		{
+			spriteRenderer.flipX = false; // 오른쪽 보기 (기본)
+		}
 	}
 
 	/// <summary>
@@ -920,6 +956,12 @@ public class PlayerController : EntityController
 		if (damageAmount > 0 && hitShake != null && camShake != null)
 		{
 			hitShake.ApplyShake(camShake, damageAmount);
+		}
+		
+		// ⭐ 피격 애니메이션 재생
+		if (animator != null && isAlive)
+		{
+			animator.SetTrigger("Hurt");
 		}
 		
 		// ⭐ 피격 후 무적 시간 부여
@@ -1152,6 +1194,46 @@ public class PlayerController : EntityController
 		// UpdateCourageState();
 	}
 
+	#endregion
+	
+	#region 애니메이션 제어
+	
+	/// <summary>
+	/// 공격 애니메이션 재생 (스킬 핸들러에서 호출)
+	/// </summary>
+	/// <param name="attackIndex">공격 애니메이션 인덱스 (1~4)</param>
+	public void PlayAttackAnimation(int attackIndex)
+	{
+		if (animator == null) return;
+		if (attackIndex < 1 || attackIndex > 4)
+		{
+			Debug.LogWarning($"[PlayerController] 잘못된 공격 애니메이션 인덱스: {attackIndex} (1~4만 유효)");
+			return;
+		}
+		
+		animator.SetTrigger($"Attack{attackIndex}");
+		isPlayingAttackAnimation = true;
+		
+		Debug.Log($"[PlayerController] Attack{attackIndex} 애니메이션 재생");
+	}
+	
+	/// <summary>
+	/// 공격 애니메이션 종료 (애니메이션 이벤트에서 호출)
+	/// </summary>
+	public void OnAttackAnimationEnd()
+	{
+		isPlayingAttackAnimation = false;
+		Debug.Log("[PlayerController] 공격 애니메이션 종료");
+	}
+	
+	/// <summary>
+	/// 현재 공격 애니메이션 재생 중인지 확인
+	/// </summary>
+	public bool IsPlayingAttackAnimation()
+	{
+		return isPlayingAttackAnimation;
+	}
+	
 	#endregion
 
 	#region 디버그 및 유틸리티

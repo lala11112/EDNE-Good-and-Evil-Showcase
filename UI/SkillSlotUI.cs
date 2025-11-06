@@ -92,6 +92,10 @@ public class SkillSlotUI : MonoBehaviour
 	private float instantReadyPulseTimer = 0f;
 	private const float PULSE_SPEED = 3f; // 펄스 속도
 	
+	// 아이콘 임시 변경
+	private Sprite originalIcon; // 원래 아이콘 (복원용)
+	private bool isIconTemporary = false; // 임시 아이콘 사용 중인지
+	
 	#endregion
 	
 	#region Unity Lifecycle
@@ -117,6 +121,8 @@ public class SkillSlotUI : MonoBehaviour
 		SkillUIEvents.OnCooldownEnded += OnCooldownEnded;
 		SkillUIEvents.OnCooldownInstantReset += OnCooldownInstantReset;
 		SkillUIEvents.OnSkillUsed += OnSkillUsed;
+		SkillUIEvents.OnSkillIconTemporaryChanged += OnSkillIconTemporaryChanged;
+		SkillUIEvents.OnSkillIconRestored += OnSkillIconRestored;
 		
 		// 정신력 변경 이벤트 구독 (사용 가능 여부 체크용)
 		PlayerStatusEvents.OnMentalPowerChanged += OnMentalPowerChanged;
@@ -134,6 +140,8 @@ public class SkillSlotUI : MonoBehaviour
 		SkillUIEvents.OnCooldownEnded -= OnCooldownEnded;
 		SkillUIEvents.OnCooldownInstantReset -= OnCooldownInstantReset;
 		SkillUIEvents.OnSkillUsed -= OnSkillUsed;
+		SkillUIEvents.OnSkillIconTemporaryChanged -= OnSkillIconTemporaryChanged;
+		SkillUIEvents.OnSkillIconRestored -= OnSkillIconRestored;
 		
 		PlayerStatusEvents.OnMentalPowerChanged -= OnMentalPowerChanged;
 	}
@@ -315,6 +323,49 @@ public class SkillSlotUI : MonoBehaviour
 	private void OnMentalPowerChanged(int currentMentalPower, int maxMentalPower)
 	{
 		UpdateAvailability();
+	}
+	
+	/// <summary>
+	/// 스킬 아이콘 임시 변경 이벤트
+	/// </summary>
+	private void OnSkillIconTemporaryChanged(SkillSlotType changedSlotType, Sprite newIcon)
+	{
+		if (changedSlotType != slotType) return;
+		
+		// 원래 아이콘 저장 (첫 번째 변경 시에만)
+		if (!isIconTemporary && skillIconImage != null)
+		{
+			originalIcon = skillIconImage.sprite;
+		}
+		
+		// 새 아이콘으로 변경
+		if (skillIconImage != null && newIcon != null)
+		{
+			skillIconImage.sprite = newIcon;
+			skillIconImage.color = Color.white;
+			isIconTemporary = true;
+			
+			Debug.Log($"[SkillSlotUI] {slotType} - 아이콘 임시 변경");
+		}
+	}
+	
+	/// <summary>
+	/// 스킬 아이콘 복원 이벤트
+	/// </summary>
+	private void OnSkillIconRestored(SkillSlotType changedSlotType)
+	{
+		if (changedSlotType != slotType) return;
+		
+		// 원래 아이콘으로 복원
+		if (isIconTemporary && skillIconImage != null && originalIcon != null)
+		{
+			skillIconImage.sprite = originalIcon;
+			skillIconImage.color = Color.white;
+			isIconTemporary = false;
+			originalIcon = null;
+			
+			Debug.Log($"[SkillSlotUI] {slotType} - 아이콘 복원");
+		}
 	}
 	
 	#endregion

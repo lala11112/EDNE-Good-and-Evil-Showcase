@@ -136,6 +136,38 @@ public static class SkillUIEvents
 	
 	#endregion
 	
+	#region 스킬 아이콘 임시 변경 이벤트
+	
+	/// <summary>
+	/// 스킬 아이콘 임시 변경 이벤트 (모드 전환 시)
+	/// 매개변수: (슬롯 타입, 새 아이콘)
+	/// </summary>
+	public static event Action<SkillSlotType, Sprite> OnSkillIconTemporaryChanged;
+	
+	/// <summary>
+	/// 스킬 아이콘 복원 이벤트
+	/// 매개변수: (슬롯 타입)
+	/// </summary>
+	public static event Action<SkillSlotType> OnSkillIconRestored;
+	
+	/// <summary>
+	/// 스킬 아이콘 임시 변경 이벤트 호출
+	/// </summary>
+	public static void InvokeSkillIconTemporaryChanged(SkillSlotType slotType, Sprite newIcon)
+	{
+		OnSkillIconTemporaryChanged?.Invoke(slotType, newIcon);
+	}
+	
+	/// <summary>
+	/// 스킬 아이콘 복원 이벤트 호출
+	/// </summary>
+	public static void InvokeSkillIconRestored(SkillSlotType slotType)
+	{
+		OnSkillIconRestored?.Invoke(slotType);
+	}
+	
+	#endregion
+	
 	#region 유틸리티
 	
 	/// <summary>
@@ -151,6 +183,8 @@ public static class SkillUIEvents
 		OnSkillAvailabilityChanged = null;
 		OnSkillUsed = null;
 		OnSkillUseFailed = null;
+		OnSkillIconTemporaryChanged = null;
+		OnSkillIconRestored = null;
 		
 		Debug.Log("[SkillUIEvents] 모든 스킬 UI 이벤트가 초기화되었습니다.");
 	}

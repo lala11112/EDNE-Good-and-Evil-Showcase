@@ -201,7 +201,14 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ExecuteBladeDance(SkillRank rank)
 	{
-		// 0. 검무 휘두르기 효과음 재생
+		// 0. 검무 애니메이션 재생 (Attack1)
+		if (playerController != null)
+		{
+			playerController.PlayAttackAnimation(1);
+			Debug.Log("[IronBladeDanceHandler] 검무 애니메이션 재생 (Attack1)");
+		}
+		
+		// 0-1. 검무 휘두르기 효과음 재생
 		PlayBladeDanceSound();
 		
 		// 1. 범위 계산 (랭크별)

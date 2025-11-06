@@ -105,6 +105,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("플레이어 스프라이트 렌더러 (잔상 복사용)")]
 	[SerializeField] private SpriteRenderer playerSpriteRenderer;
 	
+	[Tooltip("설치 모드 시 변경할 아이콘 (null이면 변경 안 함)")]
+	[SerializeField] private Sprite setupModeIcon;
+	
 	[Header("사운드 이펙트")]
 	[Tooltip("스킬 시작 효과음")]
 	[SerializeField] private AudioClip skillStartSound;
@@ -235,6 +238,17 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			skillSlot.StartCooldownFromHandler(0.5f);
 			Debug.Log($"[RainOfFaithHandler] ⏰ 0.5초 쿨타임 시작! 빠르게 폭발 가능합니다.");
+			
+			// ⭐ 금색 테두리 활성화 (즉시 재사용 가능 표시)
+			SkillUIEvents.InvokeCooldownInstantReset(skillSlot.SlotType);
+			Debug.Log($"[RainOfFaithHandler] ⚡ 금색 테두리 활성화!");
+			
+			// ⭐ 아이콘 변경 (설정되어 있으면)
+			if (setupModeIcon != null)
+			{
+				SkillUIEvents.InvokeSkillIconTemporaryChanged(skillSlot.SlotType, setupModeIcon);
+				Debug.Log($"[RainOfFaithHandler] 🎨 설치 모드 아이콘으로 변경!");
+			}
 		}
 		
 		Debug.Log($"[RainOfFaithHandler] 🔧 설치 모드 활성화 - 속도 배율: {speedMultiplier}x");
@@ -252,6 +266,13 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		
 		// 이동속도 버프 제거
 		RemoveSpeedBuff();
+		
+		// ⭐ 아이콘 복원
+		if (skillSlot != null && setupModeIcon != null)
+		{
+			SkillUIEvents.InvokeSkillIconRestored(skillSlot.SlotType);
+			Debug.Log($"[RainOfFaithHandler] 🎨 원래 아이콘으로 복원!");
+		}
 		
 		Debug.Log("[RainOfFaithHandler] 🔧 설치 모드 종료");
 	}
