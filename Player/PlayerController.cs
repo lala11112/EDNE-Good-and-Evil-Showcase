@@ -312,11 +312,20 @@ public class PlayerController : EntityController
 			inputActions.Disable();
 		}
 		
+		// ⭐ 개선 #15: 이벤트 구독 해제
+		UnsubscribeAllMonsterDeathEvents();
+		
 		// ⭐ 싱글톤 정리
 		if (Instance == this)
 		{
 			Instance = null;
 		}
+	}
+
+	private void OnDestroy()
+	{
+		// ⭐ 개선 #15: 이벤트 구독 해제 (OnDisable이 호출되지 않을 수 있으므로)
+		UnsubscribeAllMonsterDeathEvents();
 	}
 
 	private void Start()
@@ -383,7 +392,9 @@ public class PlayerController : EntityController
 		rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous; // 정확한 충돌 감지
 		rb.freezeRotation = true;               // 회전 고정
 		
+#if UNITY_EDITOR
 		Debug.Log("[PlayerController] Rigidbody2D가 Dynamic 모드로 설정되었습니다. (즉시 반응 + 물리 충돌)");
+#endif
 	}
 
 	#endregion
@@ -432,7 +443,9 @@ public class PlayerController : EntityController
 		UpdateCourageState();
 
 		// ⭐ 랭크 시스템 디버그: 초기 랭크 출력
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] ⭐ 용기 시스템 초기화 - 현재 랭크: {currentSkillRank}, 용기 단계: {currentCourageState}, 용기 점수: {courageScore}");
+#endif
 
 		// ⭐ 용기 시스템 이벤트 구독
 		// 몬스터 처치 이벤트는 Start에서 구독 (MonsterController가 생성된 후)
@@ -458,7 +471,9 @@ public class PlayerController : EntityController
 		{
 			monster.OnMonsterKilledBySkill += OnMonsterKilled;
 			subscribedMonsters.Add(monster);
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] {monster.name}의 죽음 이벤트 구독 완료");
+#endif
 		}
 	}
 
@@ -466,6 +481,42 @@ public class PlayerController : EntityController
 	/// 구독한 몬스터 목록 (중복 구독 방지용)
 	/// </summary>
 	private HashSet<MonsterController> subscribedMonsters = new HashSet<MonsterController>();
+
+	/// <summary>
+	/// 몬스터 이벤트 구독 해제 (개선 #15: 이벤트 구독 해제 로직 추가)
+	/// </summary>
+	/// <param name="monster">구독 해제할 몬스터</param>
+	public void UnsubscribeMonsterDeathEvent(MonsterController monster)
+	{
+		if (monster == null) return;
+
+		if (subscribedMonsters.Contains(monster))
+		{
+			monster.OnMonsterKilledBySkill -= OnMonsterKilled;
+			subscribedMonsters.Remove(monster);
+#if UNITY_EDITOR
+			Debug.Log($"[PlayerController] {monster.name}의 죽음 이벤트 구독 해제 완료");
+#endif
+		}
+	}
+
+	/// <summary>
+	/// 모든 몬스터 이벤트 구독 해제 (개선 #15: 이벤트 구독 해제 로직 추가)
+	/// </summary>
+	private void UnsubscribeAllMonsterDeathEvents()
+	{
+		foreach (var monster in subscribedMonsters)
+		{
+			if (monster != null)
+			{
+				monster.OnMonsterKilledBySkill -= OnMonsterKilled;
+			}
+		}
+		subscribedMonsters.Clear();
+#if UNITY_EDITOR
+		Debug.Log("[PlayerController] 모든 몬스터 이벤트 구독 해제 완료");
+#endif
+	}
 
 	#endregion
 
@@ -614,7 +665,9 @@ public class PlayerController : EntityController
 		// ⭐ 랭크 시스템 디버그: 랭크 변경이 있을 때만 출력 (UpdateCourageState에서도 출력하지만, 여기서도 현재 상태 요약 출력)
 		if (previousRank != currentSkillRank)
 		{
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] ⭐ 용기 점수 변경으로 인한 랭크 변경: {previousScore} → {courageScore} (변화: {(amount > 0 ? "+" : "")}{amount}), 랭크: {previousRank} → {currentSkillRank}");
+#endif
 		}
 	}
 
@@ -667,7 +720,9 @@ public class PlayerController : EntityController
 		// ⭐ 랭크 변경 디버그
 		if (previousRank != currentSkillRank)
 		{
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] ⭐ 스킬 랭크 변경: {previousRank} → {currentSkillRank} (용기 단계: {previousState} → {currentCourageState}, 용기 점수: {courageScore})");
+#endif
 		}
 	}
 
@@ -713,7 +768,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnCourageStateChanged(CourageState previousState, CourageState newState)
 	{
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] 용기 단계 변경: {previousState} → {newState} (스킬 랭크: {currentSkillRank}, 용기 점수: {courageScore})");
+#endif
 		
 		// 자식 클래스 또는 이벤트 시스템에서 처리:
 		// - UI 업데이트
@@ -819,12 +876,14 @@ public class PlayerController : EntityController
 		}
 		else
 		{
-			// 전투 행동이 있으면 누적 감소량 초기화
-			if (accumulatedNoCombatLoss > 0f)
-			{
-				Debug.Log($"[PlayerController] 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
-				accumulatedNoCombatLoss = 0f;
-			}
+		// 전투 행동이 있으면 누적 감소량 초기화
+		if (accumulatedNoCombatLoss > 0f)
+		{
+#if UNITY_EDITOR
+			Debug.Log($"[PlayerController] 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
+#endif
+			accumulatedNoCombatLoss = 0f;
+		}
 		}
 	}
 
@@ -907,7 +966,9 @@ public class PlayerController : EntityController
 		bool isRoomActive = currentRoomController != null && currentRoomController.IsRoomActive();
 		if (!isRoomActive)
 		{
+#if UNITY_EDITOR
 			Debug.Log("[PlayerController] 방이 활성화되지 않아 용기 획득 없음");
+#endif
 			return;
 		}
 
@@ -920,38 +981,53 @@ public class PlayerController : EntityController
 		SkillSlotType usedSkill = skillSlotType.Value;
 		float currentTime = Time.time;
 
+		// ⭐ 버그 #1 수정: 기본 전투 행동 판정을 처치 기록 추가 전에 수행
+		// (이전 처치 기록을 정확하게 확인하기 위해)
+		int baseCourageGain = CalculateBaseCombatActionCourageGain(usedSkill);
+
 		// 최근 처치 기록 추가 (15초 유지)
 		recentKillRecords.Add(new KillRecord(currentTime, usedSkill));
 
 		// 멀티킬 판정 (3초 이내 동시 처치 체크 - 스킬 필터링 없이 모든 처치 수집)
+		// ⭐ 버그 #2 수정: 현재 처치를 포함하여 멀티킬 계산
 		int multiKillCount = GetRecentKillCountInDuration(currentTime, playerData.multiKillJudgmentDuration);
 		
 		// 멀티킬 기록 추가
 		recentMultiKillRecords.Add(new MultiKillRecord(currentTime, multiKillCount, usedSkill));
-
-		// 기본 전투 행동 판정
-		int baseCourageGain = CalculateBaseCombatActionCourageGain(usedSkill);
 		
 		// 멀티킬 보너스 계산
 		int multiKillBonus = CalculateMultiKillBonus(multiKillCount);
 		
-		// ⭐ 멀티킬 수가 5까지 도달하고 보너스를 받은 후 초기화
+		// ⭐ 버그 #2 수정: 멀티킬 수가 5까지 도달하고 보너스를 받은 후 초기화
+		// 초기화 후 현재 처치를 다시 추가하여 다음 처치 계산에 영향 없도록 함
 		if (multiKillCount >= 5 && multiKillBonus > 0)
 		{
 			// 멀티킬 수 5까지 도달하고 보너스를 받았으므로 처치 기록 초기화
 			recentKillRecords.Clear();
 			recentMultiKillRecords.Clear();
+			
+			// ⭐ 현재 처치를 다시 추가 (다음 처치 계산을 위해)
+			recentKillRecords.Add(new KillRecord(currentTime, usedSkill));
+			recentMultiKillRecords.Add(new MultiKillRecord(currentTime, 1, usedSkill));
+			
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] ⭐ 멀티킬 수 5까지 도달! 보너스 획득 후 멀티킬 기록 초기화 (멀티킬 수: {multiKillCount}, 보너스: +{multiKillBonus})");
+#endif
 		}
 		
-		// 스킬 연계 보너스 계산
+		// ⭐ 버그 #3 수정: 스킬 연계 보너스 계산
+		// OnSkillUsed가 먼저 호출되지 않았을 수 있으므로, 현재 스킬 사용 기록이 없으면 추가
+		// (CalculateSkillComboBonus는 현재 스킬을 포함하지만, recentSkillUseRecords에 없으면 시간 체크가 안 됨)
+		EnsureSkillUseRecord(usedSkill, currentTime);
 		int comboBonus = CalculateSkillComboBonus(usedSkill);
 		
 		// 4종 콤보(풀 체인) 완성 시 스킬 사용 기록 초기화
 		if (comboBonus == playerData.combo4Bonus)
 		{
 			recentSkillUseRecords.Clear();
+#if UNITY_EDITOR
 			Debug.Log("[PlayerController] ⭐ 4종 풀 체인 완성! 스킬 사용 기록 초기화");
+#endif
 		}
 
 		// 총 용기 획득량
@@ -965,10 +1041,12 @@ public class PlayerController : EntityController
 				: totalCourageGain;
 			
 			ChangeCourageScore(finalCourageGain);
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 용기 획득: +{finalCourageGain} " +
 			          $"(기본: {baseCourageGain}, 멀티킬: +{multiKillBonus}, 연계: +{comboBonus}, " +
 			          $"{usedSkill} 스킬, 멀티킬 수: {multiKillCount}" +
 			          (isUltimateBuffActive ? " [궁극기 버프 1.5배 적용!]" : "") + ")");
+#endif
 		}
 
 		// 전투 행동 시간 업데이트
@@ -980,22 +1058,20 @@ public class PlayerController : EntityController
 			hasDealtDamageInRoom = true;
 			roomNoDamageStartTime = currentTime;
 			lastHitTime = currentTime; // 무피해 카운트 시작 시점
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 무피해 정신력 회복 시작 - 방에서 몬스터 첫 처치 ({currentTime:F2}초)");
+#endif
 		}
 		
 		// ⭐ 전투 행동 발생: 전투 시간 연장 및 전투 없음 페널티 누적량 초기화
-		ExtendCombatTime();
-		if (accumulatedNoCombatLoss > 0f)
-		{
-			Debug.Log($"[PlayerController] 몬스터 처치로 인한 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
-			accumulatedNoCombatLoss = 0f;
-		}
+		HandleCombatAction("몬스터 처치로 인한");
 	}
 
 	/// <summary>
 	/// 기본 전투 행동 용기 획득량 계산
 	/// 스킬로 적 처치 시 기본 용기 획득량을 계산합니다.
 	/// 같은 스킬 연속 사용 시 페널티가 적용됩니다.
+	/// ⭐ 버그 #1 수정: 처치 기록 추가 전에 호출되므로 이전 처치 기록을 정확하게 확인 가능
 	/// </summary>
 	/// <param name="currentSkill">현재 처치에 사용한 스킬 타입</param>
 	/// <returns>용기 획득량 (기본: +15, 페널티: +10)</returns>
@@ -1005,6 +1081,7 @@ public class PlayerController : EntityController
 
 		// 1. 가장 최근에 죽인 스킬과 현재 스킬 비교
 		// 같은 스킬 연속 사용 시 페널티 적용
+		// ⭐ 버그 #1 수정: 처치 기록 추가 전에 호출되므로 Count - 1이 이전 처치를 가리킴
 		if (recentKillRecords.Count > 0)
 		{
 			SkillSlotType? lastKillSkill = recentKillRecords[recentKillRecords.Count - 1].skillSlotType;
@@ -1018,7 +1095,8 @@ public class PlayerController : EntityController
 
 		// 2. 15초 배열에서 3개 이상이면서 반 초과가 현재 스킬인지 체크
 		// 단조로운 스킬 사용 패턴 감지
-		if (recentKillRecords.Count >= 3)
+		// ⭐ 버그 #1 수정: 처치 기록 추가 전에 호출되므로 현재 스킬을 제외하고 계산
+		if (recentKillRecords.Count >= 2) // 현재 처치를 추가하면 3개가 되므로 2개 이상일 때 체크
 		{
 			int sameSkillCount = 0;
 			foreach (var record in recentKillRecords)
@@ -1029,8 +1107,11 @@ public class PlayerController : EntityController
 				}
 			}
 
-			// 반 초과가 같은 스킬이면 페널티 (다양한 스킬 사용 유도)
-			if (sameSkillCount > recentKillRecords.Count / 2)
+			// 현재 스킬을 포함하여 반 초과가 같은 스킬이면 페널티 (다양한 스킬 사용 유도)
+			// 현재 처치를 추가하면 Count + 1이 되므로, (sameSkillCount + 1) > (Count + 1) / 2 체크
+			// 즉, sameSkillCount + 1 > (Count + 1) / 2
+			// sameSkillCount > (Count - 1) / 2
+			if (sameSkillCount > (recentKillRecords.Count - 1) / 2)
 			{
 				return playerData.sameSkillKillCourageGain; // 페널티: +10
 			}
@@ -1076,6 +1157,35 @@ public class PlayerController : EntityController
 			case 4: return playerData.multiKill4Bonus; // +40
 			case >= 5: return playerData.multiKill5Bonus; // +50
 			default: return 0;
+		}
+	}
+
+	/// <summary>
+	/// 스킬 사용 기록 보장 (버그 #3 수정용)
+	/// OnMonsterKilled에서 스킬 연계 보너스를 계산할 때,
+	/// OnSkillUsed가 먼저 호출되지 않았을 수 있으므로 현재 스킬 사용 기록을 보장합니다.
+	/// </summary>
+	/// <param name="skillType">스킬 타입</param>
+	/// <param name="currentTime">현재 시간</param>
+	private void EnsureSkillUseRecord(SkillSlotType skillType, float currentTime)
+	{
+		// 최근 사용 기록에 현재 스킬이 없거나, 가장 최근 기록이 현재 스킬과 다르면 추가
+		// (중복 방지: 같은 스킬을 연속으로 사용한 경우가 아닌 경우만 추가)
+		bool shouldAdd = true;
+		
+		if (recentSkillUseRecords.Count > 0)
+		{
+			var lastRecord = recentSkillUseRecords[recentSkillUseRecords.Count - 1];
+			// 가장 최근 기록이 현재 스킬과 같고, 시간이 매우 가까우면 중복 추가 방지
+			if (lastRecord.skillSlotType == skillType && (currentTime - lastRecord.time) < 0.1f)
+			{
+				shouldAdd = false;
+			}
+		}
+		
+		if (shouldAdd)
+		{
+			recentSkillUseRecords.Add(new SkillUseRecord(currentTime, skillType));
 		}
 	}
 
@@ -1135,12 +1245,7 @@ public class PlayerController : EntityController
 		lastCombatActionTime = currentTime;
 		
 		// ⭐ 전투 행동 발생: 전투 시간 연장 및 전투 없음 페널티 누적량 초기화
-		ExtendCombatTime();
-		if (accumulatedNoCombatLoss > 0f)
-		{
-			Debug.Log($"[PlayerController] 스킬 사용으로 인한 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
-			accumulatedNoCombatLoss = 0f;
-		}
+		HandleCombatAction("스킬 사용으로 인한");
 	}
 
 	/// <summary>
@@ -1151,7 +1256,9 @@ public class PlayerController : EntityController
 	{
 		if (playerData == null) return;
 
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] ⭐⭐⭐ 궁극기 사용! S랭크에서 스킬 사용 - 즉시 D랭크로 추락 및 용기 0 리셋");
+#endif
 		
 		// 즉시 D랭크로 추락 (용기 0으로 설정)
 		SetCourageScore(0);
@@ -1186,7 +1293,9 @@ public class PlayerController : EntityController
 		{
 			roomNoDamageStartTime = currentTime;
 			accumulatedRegen = 0f; // 누적 회복량 초기화
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 피격으로 인한 무피해 정신력 회복 리셋 ({currentTime:F2}초)");
+#endif
 		}
 
 		// ⭐ 플레이어가 몬스터에게 데미지를 입었을 때 전투 시간 연장 (전투 중이 아니면 전투 재개, 전투 중이면 15초 추가)
@@ -1194,16 +1303,14 @@ public class PlayerController : EntityController
 		ExtendCombatTime(isHit: true);
 		
 		// ⭐ 전투 행동 발생: 전투 없음 페널티 누적량 초기화
-		if (accumulatedNoCombatLoss > 0f)
-		{
-			Debug.Log($"[PlayerController] 피격으로 인한 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
-			accumulatedNoCombatLoss = 0f;
-		}
+		ResetNoCombatPenalty("피격으로 인한");
 
 		// ⭐ 피격 시 무피해 용기 획득 누적량 초기화 (피격당했으므로 무피해 보너스 없음)
 		if (accumulatedNoDamageGain > 0f)
 		{
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 피격으로 인한 무피해 용기 획득 누적량 초기화: {accumulatedNoDamageGain:F4} 용기");
+#endif
 			accumulatedNoDamageGain = 0f;
 		}
 
@@ -1219,7 +1326,9 @@ public class PlayerController : EntityController
 		if (courageLoss > 0)
 		{
 			ChangeCourageScore(-courageLoss);
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 피격 용기 감소: -{courageLoss} (소스 타입: {damageInfo.sourceType}, 연속 피격 수: {recentHitTimes.Count})");
+#endif
 		}
 	}
 
@@ -1287,8 +1396,10 @@ public class PlayerController : EntityController
 		if (finalCourageGain > 0)
 		{
 			ChangeCourageScore(finalCourageGain);
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 완벽한 회피 용기 획득: +{finalCourageGain}" +
 			          (isUltimateBuffActive ? " [궁극기 버프 1.5배 적용!]" : ""));
+#endif
 		}
 
 		// 전투 행동 시간 업데이트
@@ -1308,7 +1419,9 @@ public class PlayerController : EntityController
 		}
 
 		currentRoomController = roomController;
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] 현재 방 컨트롤러 설정: {roomController?.name ?? "null"}");
+#endif
 		
 		// ⭐ 방 진입 시 전투 시작 (방이 활성화되어 있을 때만)
 		if (roomController != null && roomController.IsRoomActive())
@@ -1346,7 +1459,9 @@ public class PlayerController : EntityController
 		isInCombat = false;
 		combatEndTime = 0f;
 
+#if UNITY_EDITOR
 		Debug.Log("[PlayerController] 방 클리어 - 용기 시스템 기록 초기화 (누적량, 전투 상태, 무피해 정신력 회복 포함)");
+#endif
 	}
 
 	#endregion
@@ -1363,10 +1478,12 @@ public class PlayerController : EntityController
 		isUltimateBuffActive = true;
 		ultimateBuffEndTime = currentTime + duration;
 		
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] ⭐⭐⭐ S랭크 궁극기 버프 발동! (지속 시간: {duration}초)\n" +
 		          $"  - 용기 획득량 증가: 1.5배\n" +
 		          $"  - 정신력 회복 속도 증가: 2배\n" +
 		          $"  - 이동 속도 증가: 1.2배");
+#endif
 	}
 
 	/// <summary>
@@ -1386,7 +1503,35 @@ public class PlayerController : EntityController
 			isUltimateBuffActive = false;
 			ultimateBuffEndTime = 0f;
 			
+#if UNITY_EDITOR
 			Debug.Log("[PlayerController] ⭐ S랭크 궁극기 버프 종료");
+#endif
+		}
+	}
+
+	/// <summary>
+	/// 전투 행동 처리 (개선 #9: 중복 로직 리팩토링)
+	/// 전투 시간 연장 및 전투 없음 페널티 누적량 초기화를 통합 처리합니다.
+	/// </summary>
+	/// <param name="actionDescription">행동 설명 (로그용)</param>
+	private void HandleCombatAction(string actionDescription)
+	{
+		ExtendCombatTime();
+		ResetNoCombatPenalty(actionDescription);
+	}
+
+	/// <summary>
+	/// 전투 없음 페널티 초기화 (개선 #9: 중복 로직 리팩토링)
+	/// </summary>
+	/// <param name="actionDescription">행동 설명 (로그용)</param>
+	private void ResetNoCombatPenalty(string actionDescription)
+	{
+		if (accumulatedNoCombatLoss > 0f)
+		{
+#if UNITY_EDITOR
+			Debug.Log($"[PlayerController] {actionDescription} 전투 행동 재개 - 누적 전투 없음 페널티 초기화: {accumulatedNoCombatLoss:F4} 용기");
+#endif
+			accumulatedNoCombatLoss = 0f;
 		}
 	}
 
@@ -1407,12 +1552,14 @@ public class PlayerController : EntityController
 		combatEndTime = currentTime + playerData.initialCombatDuration;
 
 		float remainingTime = combatEndTime - currentTime;
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] ⚔️ 전투 시작!\n" +
 		          $"  - 전투 상태: 전투 중 (isInCombat = true)\n" +
 		          $"  - 현재 시간: {currentTime:F2}초\n" +
 		          $"  - 전투 종료 예정 시간: {combatEndTime:F2}초\n" +
 		          $"  - 남은 전투 시간: {remainingTime:F2}초\n" +
 		          $"  - 기본 전투 시간: {playerData.initialCombatDuration}초");
+#endif
 	}
 
 	/// <summary>
@@ -1471,7 +1618,9 @@ public class PlayerController : EntityController
 			  $"  - 남은 전투 시간: {remainingTime:F2}초\n" +
 			  $"  - 계산된 새로운 종료 시간: {newCombatEndTime:F2}초 (기존 시간이 더 늦어서 적용 안 됨)";
 		
+#if UNITY_EDITOR
 		Debug.Log(logMessage);
+#endif
 	}
 
 	/// <summary>
@@ -1518,15 +1667,19 @@ public class PlayerController : EntityController
 		// 전투 종료 시 무피해 보너스 누적량 초기화
 		if (accumulatedNoDamageGain > 0f)
 		{
+#if UNITY_EDITOR
 			Debug.Log($"[PlayerController] 전투 종료 - 무피해 용기 획득 누적량 초기화: {accumulatedNoDamageGain:F4} 용기");
+#endif
 			accumulatedNoDamageGain = 0f;
 		}
 
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] ⚔️ 전투 종료!\n" +
 		          $"  - 전투 상태: 전투 종료 (isInCombat = false)\n" +
 		          $"  - 현재 시간: {currentTime:F2}초\n" +
 		          $"  - 전투 종료 시간: {combatEndTime:F2}초\n" +
 		          $"  - 다음 전투 행동까지 {playerData.combatEndJudgmentDuration}초 안에 전투 재개 가능");
+#endif
 	}
 
 	#endregion
@@ -1567,7 +1720,9 @@ public class PlayerController : EntityController
 		knockbackElapsedTime = 0f;
 		isKnockedBack = true;
 
+#if UNITY_EDITOR
 		Debug.Log($"[PlayerController] 넉백 적용 - 방향: {knockbackDirection}, 힘: {force}, 시간: {duration}초");
+#endif
 	}
 
 	/// <summary>
@@ -1628,7 +1783,9 @@ public class PlayerController : EntityController
 		// 이동 입력이 있으면 다음 ProcessMovement에서 처리됨
 		rb.linearVelocity = Vector2.zero;
 
+#if UNITY_EDITOR
 		Debug.Log("[PlayerController] 넉백 종료");
+#endif
 	}
 
 	/// <summary>
@@ -1901,7 +2058,9 @@ public class PlayerController : EntityController
 	{
 		base.Die(); // 기본 사망 처리
 
+#if UNITY_EDITOR
 		Debug.Log("[PlayerController] 플레이어 사망 (체력 0)");
+#endif
 
 		// 플레이어 전용 사망 처리
 		OnPlayerDeath();
@@ -1912,7 +2071,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnPlayerDeath()
 	{
+#if UNITY_EDITOR
 		Debug.Log("[PlayerController] 플레이어 사망 이벤트 발생");
+#endif
 		
 		// 입력 비활성화
 		if (inputActions != null)
@@ -1942,7 +2103,9 @@ public class PlayerController : EntityController
 	/// </summary>
 	public void Revive()
 	{
+#if UNITY_EDITOR
 		Debug.Log("[PlayerController] 플레이어 부활");
+#endif
 		
 		// 체력 완전 회복 (최대로 설정)
 		currentHealth = MaxHealth;
