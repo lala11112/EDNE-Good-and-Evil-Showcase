@@ -57,6 +57,9 @@ public class SkillSlotUI : MonoBehaviour
 	[Tooltip("사용 불가 시 테두리 색상")]
 	[SerializeField] private Color unavailableBorderColor = Color.gray;
 	
+	[Tooltip("즉시 재사용 가능 시 테두리 색상 (특수 조건 충족)")]
+	[SerializeField] private Color instantReadyBorderColor = new Color(1f, 0.84f, 0f, 1f); // 금색
+	
 	#endregion
 	
 	#region 애니메이션 설정
@@ -84,6 +87,15 @@ public class SkillSlotUI : MonoBehaviour
 	private float flashTimer;
 	private Image borderImage; // 테두리 이미지 (자동 탐색)
 	
+	// 즉시 재사용 가능 상태
+	private bool isInstantReady = false;
+	private float instantReadyPulseTimer = 0f;
+	private const float PULSE_SPEED = 3f; // 펄스 속도
+	
+	// 아이콘 임시 변경
+	private Sprite originalIcon; // 원래 아이콘 (복원용)
+	private bool isIconTemporary = false; // 임시 아이콘 사용 중인지
+	
 	#endregion
 	
 	#region Unity Lifecycle
@@ -107,7 +119,10 @@ public class SkillSlotUI : MonoBehaviour
 		SkillUIEvents.OnCooldownStarted += OnCooldownStarted;
 		SkillUIEvents.OnCooldownUpdated += OnCooldownUpdated;
 		SkillUIEvents.OnCooldownEnded += OnCooldownEnded;
+		SkillUIEvents.OnCooldownInstantReset += OnCooldownInstantReset;
 		SkillUIEvents.OnSkillUsed += OnSkillUsed;
+		SkillUIEvents.OnSkillIconTemporaryChanged += OnSkillIconTemporaryChanged;
+		SkillUIEvents.OnSkillIconRestored += OnSkillIconRestored;
 		
 		// 정신력 변경 이벤트 구독 (사용 가능 여부 체크용)
 		PlayerStatusEvents.OnMentalPowerChanged += OnMentalPowerChanged;
@@ -123,7 +138,10 @@ public class SkillSlotUI : MonoBehaviour
 		SkillUIEvents.OnCooldownStarted -= OnCooldownStarted;
 		SkillUIEvents.OnCooldownUpdated -= OnCooldownUpdated;
 		SkillUIEvents.OnCooldownEnded -= OnCooldownEnded;
+		SkillUIEvents.OnCooldownInstantReset -= OnCooldownInstantReset;
 		SkillUIEvents.OnSkillUsed -= OnSkillUsed;
+		SkillUIEvents.OnSkillIconTemporaryChanged -= OnSkillIconTemporaryChanged;
+		SkillUIEvents.OnSkillIconRestored -= OnSkillIconRestored;
 		
 		PlayerStatusEvents.OnMentalPowerChanged -= OnMentalPowerChanged;
 	}
@@ -132,6 +150,9 @@ public class SkillSlotUI : MonoBehaviour
 	{
 		// 플래시 효과 업데이트
 		UpdateFlashEffect(Time.deltaTime);
+		
+		// 즉시 재사용 가능 펄스 효과 업데이트
+		UpdateInstantReadyPulse(Time.deltaTime);
 	}
 	
 	#endregion
@@ -266,11 +287,28 @@ public class SkillSlotUI : MonoBehaviour
 	}
 	
 	/// <summary>
+	/// 쿨타임 즉시 초기화 이벤트 (특수 조건 충족)
+	/// </summary>
+	private void OnCooldownInstantReset(SkillSlotType changedSlotType)
+	{
+		if (changedSlotType != slotType) return;
+		
+		// 즉시 재사용 가능 상태로 전환
+		StartInstantReadyMode();
+	}
+	
+	/// <summary>
 	/// 스킬 사용 이벤트
 	/// </summary>
 	private void OnSkillUsed(SkillSlotType changedSlotType, PlayerSkillData skillData)
 	{
 		if (changedSlotType != slotType) return;
+		
+		// 즉시 재사용 가능 모드 종료 (스킬을 사용했으므로)
+		if (isInstantReady)
+		{
+			EndInstantReadyMode();
+		}
 		
 		// 플래시 효과
 		if (useFlashEffect)
@@ -285,6 +323,49 @@ public class SkillSlotUI : MonoBehaviour
 	private void OnMentalPowerChanged(int currentMentalPower, int maxMentalPower)
 	{
 		UpdateAvailability();
+	}
+	
+	/// <summary>
+	/// 스킬 아이콘 임시 변경 이벤트
+	/// </summary>
+	private void OnSkillIconTemporaryChanged(SkillSlotType changedSlotType, Sprite newIcon)
+	{
+		if (changedSlotType != slotType) return;
+		
+		// 원래 아이콘 저장 (첫 번째 변경 시에만)
+		if (!isIconTemporary && skillIconImage != null)
+		{
+			originalIcon = skillIconImage.sprite;
+		}
+		
+		// 새 아이콘으로 변경
+		if (skillIconImage != null && newIcon != null)
+		{
+			skillIconImage.sprite = newIcon;
+			skillIconImage.color = Color.white;
+			isIconTemporary = true;
+			
+			Debug.Log($"[SkillSlotUI] {slotType} - 아이콘 임시 변경");
+		}
+	}
+	
+	/// <summary>
+	/// 스킬 아이콘 복원 이벤트
+	/// </summary>
+	private void OnSkillIconRestored(SkillSlotType changedSlotType)
+	{
+		if (changedSlotType != slotType) return;
+		
+		// 원래 아이콘으로 복원
+		if (isIconTemporary && skillIconImage != null && originalIcon != null)
+		{
+			skillIconImage.sprite = originalIcon;
+			skillIconImage.color = Color.white;
+			isIconTemporary = false;
+			originalIcon = null;
+			
+			Debug.Log($"[SkillSlotUI] {slotType} - 아이콘 복원");
+		}
 	}
 	
 	#endregion
@@ -419,7 +500,8 @@ public class SkillSlotUI : MonoBehaviour
 		}
 		
 		// 테두리 색상 변경
-		if (borderImage != null)
+		// ⭐ 즉시 재사용 가능 모드일 때는 특별한 색상 사용 (펄스 효과에서 처리)
+		if (borderImage != null && !isInstantReady)
 		{
 			borderImage.color = isAvailable ? availableBorderColor : unavailableBorderColor;
 		}
@@ -454,6 +536,66 @@ public class SkillSlotUI : MonoBehaviour
 				borderImage.color = Color.Lerp(targetColor, flashColor, t);
 			}
 		}
+	}
+	
+	#endregion
+	
+	#region 즉시 재사용 가능 모드 (특수 조건 충족)
+	
+	/// <summary>
+	/// 즉시 재사용 가능 모드 시작
+	/// </summary>
+	private void StartInstantReadyMode()
+	{
+		isInstantReady = true;
+		instantReadyPulseTimer = 0f;
+		
+		// 쿨타임 오버레이 즉시 종료
+		if (cooldownOverlayImage != null)
+		{
+			cooldownOverlayImage.fillAmount = 0f;
+			cooldownOverlayImage.gameObject.SetActive(false);
+		}
+		
+		if (cooldownText != null)
+		{
+			cooldownText.text = "";
+			cooldownText.gameObject.SetActive(false);
+		}
+		
+		Debug.Log($"[SkillSlotUI] {slotType} - ⚡ 즉시 재사용 가능 모드 시작! (금색 펄스)");
+	}
+	
+	/// <summary>
+	/// 즉시 재사용 가능 모드 종료
+	/// </summary>
+	private void EndInstantReadyMode()
+	{
+		isInstantReady = false;
+		instantReadyPulseTimer = 0f;
+		
+		// 원래 색상으로 복구
+		UpdateAvailability();
+		
+		Debug.Log($"[SkillSlotUI] {slotType} - 즉시 재사용 가능 모드 종료");
+	}
+	
+	/// <summary>
+	/// 즉시 재사용 가능 펄스 효과 업데이트
+	/// </summary>
+	private void UpdateInstantReadyPulse(float deltaTime)
+	{
+		if (!isInstantReady || borderImage == null) return;
+		
+		instantReadyPulseTimer += deltaTime * PULSE_SPEED;
+		
+		// 사인파를 사용한 펄스 효과 (0.6 ~ 1.0 사이로 밝기 조절)
+		float pulseValue = 0.6f + (Mathf.Sin(instantReadyPulseTimer) * 0.5f + 0.5f) * 0.4f;
+		
+		// 금색 테두리에 펄스 적용
+		Color pulseColor = instantReadyBorderColor * pulseValue;
+		pulseColor.a = instantReadyBorderColor.a; // 알파는 유지
+		borderImage.color = pulseColor;
 	}
 	
 	#endregion

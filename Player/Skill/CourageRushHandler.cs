@@ -15,6 +15,7 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	private PlayerSkillData skillData;
 	private GameObject owner;
 	private PlayerController playerController;
+	private SkillSlot skillSlot; // 쿨타임 강제 초기화를 위한 SkillSlot 참조
 	
 	#endregion
 	
@@ -103,11 +104,57 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	
 	#endregion
 	
+	#region 돌진 중 충돌
+	
+	[Header("돌진 중 충돌 시스템")]
+	[Tooltip("돌진 중 적 충돌 감지 반경")]
+	[SerializeField] private float collisionDetectionRadius = 0.8f;
+	
+	[Tooltip("돌진 중 충돌 시 데미지 퍼센테이지")]
+	[SerializeField] private float collisionDamagePercent = 50f;
+	
+	[Tooltip("재사용 활성화에 필요한 적 충돌 수")]
+	[SerializeField] private int requiredCollisionCount = 2;
+	
+	[Tooltip("적 충돌 시 효과음")]
+	[SerializeField] private AudioClip enemyCollisionSound;
+	
+	[Tooltip("적 충돌 시 이펙트")]
+	[SerializeField] private GameObject enemyCollisionEffectPrefab;
+	
+	// 돌진 중 충돌한 적 목록 (중복 방지)
+	private HashSet<EntityController> hitEnemiesDuringDash = new HashSet<EntityController>();
+	
+	#endregion
+	
+	#region 궤적 폭발
+	
+	[Header("궤적 폭발 시스템")]
+	[Tooltip("궤적 폭발까지 대기 시간 (초)")]
+	[SerializeField] private float trailExplosionDelay = 1.5f;
+	
+	[Tooltip("궤적 폭발 데미지 퍼센테이지")]
+	[SerializeField] private float trailExplosionDamagePercent = 40f;
+	
+	[Tooltip("궤적 폭발 범위")]
+	[SerializeField] private float trailExplosionRadius = 1.5f;
+	
+	[Tooltip("궤적 폭발 이펙트")]
+	[SerializeField] private GameObject trailExplosionEffectPrefab;
+	
+	[Tooltip("궤적 폭발 효과음")]
+	[SerializeField] private AudioClip trailExplosionSound;
+	
+	#endregion
+	
 	#region 이펙트
 	
 	[Header("비주얼 이펙트")]
-	[Tooltip("대쉬 궤적 이펙트")]
+	[Tooltip("대쉬 궤적 이펙트 (바닥에 남는 궤적)")]
 	[SerializeField] private GameObject dashTrailPrefab;
+	
+	[Tooltip("바람을 가르는 이펙트 (플레이어와 함께 돌진)")]
+	[SerializeField] private GameObject windSlashEffectPrefab;
 	
 	[Tooltip("AOE 이펙트")]
 	[SerializeField] private GameObject aoeEffectPrefab;
@@ -121,6 +168,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("AOE 착지 효과음")]
 	[SerializeField] private AudioClip aoeImpactSound;
+	
+	[Tooltip("AOE 착지 효과음 딜레이 (초)")]
+	[SerializeField] private float aoeImpactSoundDelay = 0f;
 	
 	#endregion
 	
@@ -144,6 +194,13 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			Debug.LogError("[CourageRushHandler] PlayerController를 찾을 수 없습니다!");
 		}
+		
+		// SkillSlot 찾기 (쿨타임 강제 초기화를 위해)
+		skillSlot = GetComponentInParent<SkillSlot>();
+		if (skillSlot == null)
+		{
+			Debug.LogWarning("[CourageRushHandler] SkillSlot을 찾을 수 없습니다. 쿨타임 강제 초기화 기능이 작동하지 않을 수 있습니다.");
+		}
 	}
 	
 	public void Use(SkillRank rank)
@@ -154,12 +211,7 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// 정신력 소모 체크
-		int mentalCost = CalculateMentalCost(rank);
-		if (!playerController.TryConsumeMentalPower(mentalCost))
-		{
-			return;
-		}
+		// ⭐ 정신력 소모 체크는 SkillSlot에서 처리됨
 		
 		// S랭크 모드 체크
 		if (rank == SkillRank.S && !isInSRankMode)
@@ -179,6 +231,7 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		skillData = null;
 		owner = null;
 		playerController = null;
+		skillSlot = null;
 	}
 	
 	#endregion
@@ -190,7 +243,17 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private IEnumerator ExecuteDash(SkillRank rank)
 	{
-		// 0. 대쉬 시작 효과음 재생
+		// 0. 대쉬 애니메이션 재생 (Attack2)
+		if (playerController != null)
+		{
+			playerController.PlayAttackAnimation(2);
+			Debug.Log("[CourageRushHandler] 대쉬 애니메이션 재생 (Attack2)");
+		}
+		
+		// 0-1. 충돌한 적 목록 초기화
+		hitEnemiesDuringDash.Clear();
+		
+		// 0-2. 대쉬 시작 효과음 재생
 		PlayDashStartSound();
 		
 		// 1. Rigidbody2D 가져오기 및 물리 상태 초기화
@@ -285,6 +348,36 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		float elapsedTime = 0f;
 		Vector3 currentPos = startPos;
 		
+		// 대쉬 궤적 이펙트 생성 (바닥에 남는 궤적)
+		GameObject trail = null;
+		if (dashTrailPrefab != null)
+		{
+			// 돌진 방향을 바라보도록 회전 설정
+			float angle = Mathf.Atan2(dashDirection.y, dashDirection.x) * Mathf.Rad2Deg;
+			Quaternion rotation = Quaternion.Euler(0, 0, angle);
+			
+			trail = Instantiate(dashTrailPrefab, playerController.transform.position, rotation);
+			trail.transform.SetParent(playerController.transform);
+		}
+		
+		// 바람을 가르는 이펙트 생성 (플레이어와 함께 돌진)
+		GameObject windEffect = null;
+		if (windSlashEffectPrefab != null)
+		{
+			// 돌진 방향을 바라보도록 회전 설정
+			float angle = Mathf.Atan2(dashDirection.y, dashDirection.x) * Mathf.Rad2Deg;
+			Quaternion rotation = Quaternion.Euler(0, 0, angle);
+			
+			windEffect = Instantiate(windSlashEffectPrefab, playerController.transform.position, rotation);
+			windEffect.transform.SetParent(playerController.transform);
+			
+			Debug.Log($"[CourageRush] 바람 이펙트 생성 (각도: {angle}도)");
+		}
+		
+		// 궤적 폭발을 위한 경로 저장
+		List<Vector3> dashPath = new List<Vector3>();
+		dashPath.Add(startPos);
+		
 		while (elapsedTime < dashDuration)
 		{
 			elapsedTime += Time.deltaTime;
@@ -324,6 +417,16 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			
 			currentPos = nextPos;
 			playerController.transform.position = currentPos;
+			
+			// 경로 저장 (일정 간격마다)
+			if (Vector3.Distance(dashPath[dashPath.Count - 1], currentPos) > 0.5f)
+			{
+				dashPath.Add(currentPos);
+			}
+			
+			// 돌진 중 적 충돌 감지
+			CheckEnemyCollisionDuringDash(currentPos, rank);
+			
 			yield return null;
 		}
 		
@@ -348,19 +451,71 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			playerController.SetInvincible(false);
 		}
 		
-		// 9. 물리 상태 복원
+		// 9. 대쉬 궤적 이펙트 정리
+		if (trail != null)
+		{
+			trail.transform.SetParent(null);
+			Destroy(trail, 2f);
+		}
+		
+		// 9-1. 바람 이펙트 정리
+		if (windEffect != null)
+		{
+			windEffect.transform.SetParent(null);
+			Destroy(windEffect, 0.5f); // 짧은 시간 후 제거
+			Debug.Log("[CourageRush] 바람 이펙트 제거");
+		}
+		
+		// 10. 물리 상태 복원
 		if (rb != null)
 		{
 			rb.linearVelocity = Vector2.zero; // 대쉬 후 속도 초기화
 		}
 		
-		// 10. 도착 지점 AOE 효과 (실제 도착한 위치에서 발동)
+		// 10-1. 최종 경로 위치 추가
+		if (dashPath.Count == 0 || Vector3.Distance(dashPath[dashPath.Count - 1], finalPosition) > 0.1f)
+		{
+			dashPath.Add(finalPosition);
+		}
+		
+		// 10-2. 궤적 폭발 코루틴 시작
+		if (dashPath.Count > 1)
+		{
+			StartCoroutine(TrailExplosionCoroutine(dashPath, rank));
+		}
+		
+		// 11. 도착 지점 AOE 효과 (실제 도착한 위치에서 발동)
 		ApplyAOEEffect(finalPosition, rank);
 		
-		// 11. 재사용 상태 업데이트
-		if (isRechargeAvailable)
+		// 12. 돌진 중 충돌한 적이 2명 이상이면 즉시 재사용 가능
+		if (hitEnemiesDuringDash.Count >= requiredCollisionCount)
 		{
-			// 재사용 소모
+			isRechargeAvailable = true;
+			Debug.Log($"[CourageRush] {hitEnemiesDuringDash.Count}명의 적과 충돌! 즉시 재사용 가능!");
+			
+			// ⭐ 쿨타임 강제 초기화 (즉시 재사용 가능하게 만듦)
+			if (skillSlot != null)
+			{
+				skillSlot.ResetCooldown();
+			}
+			else
+			{
+				Debug.LogWarning("[CourageRush] SkillSlot이 없어서 쿨타임을 초기화할 수 없습니다!");
+			}
+			
+			// 재사용 가능 이펙트 표시
+			if (rechargeReadyEffectPrefab != null && playerController != null)
+			{
+				GameObject effect = Instantiate(rechargeReadyEffectPrefab, playerController.transform.position, Quaternion.identity);
+				effect.transform.SetParent(playerController.transform);
+				Destroy(effect, 2f);
+			}
+		}
+		
+		// 13. 재사용 상태 업데이트
+		if (isRechargeAvailable && hitEnemiesDuringDash.Count < requiredCollisionCount)
+		{
+			// 재사용 소모 (충돌로 인한 재사용이 아닌 경우에만)
 			isRechargeAvailable = false;
 			currentRechargeCount--;
 			
@@ -370,11 +525,14 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 				sRankRemainingTime += sRankTimeRecovery;
 			}
 		}
-		else
+		else if (!isRechargeAvailable && hitEnemiesDuringDash.Count < requiredCollisionCount)
 		{
 			// 1차 사용 후 재사용 준비
 			currentRechargeCount = maxRechargeCount;
 		}
+		
+		// 14. 충돌한 적 목록 초기화 (다음 대쉬를 위해)
+		// hitEnemiesDuringDash.Clear(); // 다음 대쉬 시작 시 초기화하므로 여기서는 불필요
 	}
 	
 	#endregion
@@ -386,8 +544,15 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	/// </summary>
 	private void ApplyAOEEffect(Vector3 position, SkillRank rank)
 	{
-		// 0. AOE 착지 효과음 재생
-		PlayAOEImpactSound();
+		// 0. AOE 착지 효과음 재생 (딜레이 적용)
+		if (aoeImpactSoundDelay > 0f)
+		{
+			StartCoroutine(PlayAOEImpactSoundDelayed(aoeImpactSoundDelay));
+		}
+		else
+		{
+			PlayAOEImpactSound();
+		}
 		
 		// 1. 데미지 계산
 		float damage = CalculateDamage(rank);
@@ -428,6 +593,140 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			
 			Destroy(aoeEffect, aoeDuration);
 		}
+	}
+	
+	#endregion
+	
+	#region 돌진 중 충돌 처리
+	
+	/// <summary>
+	/// 돌진 중 적 충돌 감지 및 처리
+	/// </summary>
+	private void CheckEnemyCollisionDuringDash(Vector3 currentPosition, SkillRank rank)
+	{
+		// 현재 위치에서 반경 내 적 탐지
+		Collider2D[] colliders = Physics2D.OverlapCircleAll(currentPosition, collisionDetectionRadius);
+		
+		foreach (var collider in colliders)
+		{
+			EntityController entity = collider.GetComponent<EntityController>();
+			if (entity == null || !entity.IsAlive) continue;
+			if (entity.EntityType != EntityType.Monster) continue;
+			
+			// 이미 충돌한 적은 무시 (중복 방지)
+			if (hitEnemiesDuringDash.Contains(entity))
+			{
+				continue;
+			}
+			
+			// 충돌 목록에 추가
+			hitEnemiesDuringDash.Add(entity);
+			
+			// 데미지 계산 및 적용
+			float damage = CalculateCollisionDamage(rank);
+			int finalDamage = Mathf.RoundToInt(damage);
+			entity.ApplyDamage(finalDamage, EntityType.Player, this);
+			
+			Debug.Log($"[CourageRush] 돌진 중 적 충돌! {entity.name}에게 {finalDamage} 데미지 (총 {hitEnemiesDuringDash.Count}명 충돌)");
+			
+			// 충돌 이펙트 생성
+			if (enemyCollisionEffectPrefab != null)
+			{
+				GameObject effect = Instantiate(enemyCollisionEffectPrefab, entity.transform.position, Quaternion.identity);
+				Destroy(effect, 1f);
+			}
+			
+			// 충돌 효과음 재생
+			PlayEnemyCollisionSound();
+		}
+	}
+	
+	/// <summary>
+	/// 돌진 중 충돌 데미지 계산
+	/// </summary>
+	private float CalculateCollisionDamage(SkillRank rank)
+	{
+		// 1. 기본 데미지
+		float damage = playerController.CalculateSkillDamage(collisionDamagePercent);
+		
+		// 2. 랭크 배율
+		float rankMultiplier = skillData.GetDamageMultiplier(rank);
+		damage *= rankMultiplier;
+		
+		return damage;
+	}
+	
+	#endregion
+	
+	#region 궤적 폭발
+	
+	/// <summary>
+	/// 궤적 폭발 코루틴
+	/// 대쉬 경로를 따라 일정 시간 후 폭발합니다.
+	/// </summary>
+	private IEnumerator TrailExplosionCoroutine(List<Vector3> path, SkillRank rank)
+	{
+		// 폭발 대기
+		yield return new WaitForSeconds(trailExplosionDelay);
+		
+		Debug.Log($"[CourageRush] 궤적 폭발 시작! 경로 포인트: {path.Count}개");
+		
+		// 각 경로 포인트에서 폭발
+		foreach (var position in path)
+		{
+			// 폭발 데미지 계산
+			float explosionDamage = CalculateTrailExplosionDamage(rank);
+			
+			// 범위 내 적 탐지
+			Collider2D[] colliders = Physics2D.OverlapCircleAll(position, trailExplosionRadius);
+			
+			foreach (var collider in colliders)
+			{
+				EntityController entity = collider.GetComponent<EntityController>();
+				if (entity == null || !entity.IsAlive) continue;
+				if (entity.EntityType != EntityType.Monster) continue;
+				
+				// 데미지 적용
+				int finalDamage = Mathf.RoundToInt(explosionDamage);
+				entity.ApplyDamage(finalDamage, EntityType.Player, this);
+				
+				Debug.Log($"[CourageRush] 궤적 폭발! {entity.name}에게 {finalDamage} 데미지");
+			}
+			
+			// 폭발 이펙트 생성
+			if (trailExplosionEffectPrefab != null)
+			{
+				GameObject effect = Instantiate(trailExplosionEffectPrefab, position, Quaternion.identity);
+				effect.transform.localScale = Vector3.one * (trailExplosionRadius * 2f);
+				Destroy(effect, 1.5f);
+			}
+			
+			// 폭발 효과음 재생 (첫 번째 폭발만)
+			if (position == path[0])
+			{
+				PlayTrailExplosionSound();
+			}
+			
+			// 각 폭발 사이 짧은 딜레이 (연쇄 폭발 느낌)
+			yield return new WaitForSeconds(0.05f);
+		}
+		
+		Debug.Log($"[CourageRush] 궤적 폭발 완료!");
+	}
+	
+	/// <summary>
+	/// 궤적 폭발 데미지 계산
+	/// </summary>
+	private float CalculateTrailExplosionDamage(SkillRank rank)
+	{
+		// 1. 기본 데미지
+		float damage = playerController.CalculateSkillDamage(trailExplosionDamagePercent);
+		
+		// 2. 랭크 배율
+		float rankMultiplier = skillData.GetDamageMultiplier(rank);
+		damage *= rankMultiplier;
+		
+		return damage;
 	}
 	
 	#endregion
@@ -484,9 +783,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	}
 	
 	/// <summary>
-	/// 정신력 소모 계산
+	/// 정신력 소모 계산 (SkillSlot에서 호출)
 	/// </summary>
-	private int CalculateMentalCost(SkillRank rank)
+	public int CalculateMentalCost(SkillRank rank)
 	{
 		int cost = skillData.mentalCost;
 		
@@ -599,6 +898,52 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			}
 			audioSource.PlayOneShot(aoeImpactSound);
 			Debug.Log("[CourageRushHandler] AOE 착지 효과음 재생");
+		}
+	}
+	
+	/// <summary>
+	/// AOE 착지 효과음 딜레이 후 재생
+	/// </summary>
+	private IEnumerator PlayAOEImpactSoundDelayed(float delay)
+	{
+		yield return new WaitForSeconds(delay);
+		PlayAOEImpactSound();
+	}
+	
+	/// <summary>
+	/// 적 충돌 효과음 재생
+	/// </summary>
+	private void PlayEnemyCollisionSound()
+	{
+		if (enemyCollisionSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(enemyCollisionSound, 0.7f); // 볼륨 약간 낮춤
+		}
+	}
+	
+	/// <summary>
+	/// 궤적 폭발 효과음 재생
+	/// </summary>
+	private void PlayTrailExplosionSound()
+	{
+		if (trailExplosionSound != null && playerController != null)
+		{
+			AudioSource audioSource = playerController.GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = playerController.gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(trailExplosionSound);
+			Debug.Log("[CourageRushHandler] 궤적 폭발 효과음 재생");
 		}
 	}
 	

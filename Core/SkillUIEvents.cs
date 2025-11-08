@@ -46,6 +46,13 @@ public static class SkillUIEvents
 	public static event Action<SkillSlotType> OnCooldownEnded;
 	
 	/// <summary>
+	/// 쿨타임 즉시 초기화 이벤트 (특별한 조건으로 인한 즉시 재사용)
+	/// 매개변수: (슬롯 타입)
+	/// 용기의 질주 등 특수 조건 충족 시 발생
+	/// </summary>
+	public static event Action<SkillSlotType> OnCooldownInstantReset;
+	
+	/// <summary>
 	/// 쿨타임 시작 이벤트 호출
 	/// </summary>
 	public static void InvokeCooldownStarted(SkillSlotType slotType, float cooldownTime)
@@ -67,6 +74,14 @@ public static class SkillUIEvents
 	public static void InvokeCooldownEnded(SkillSlotType slotType)
 	{
 		OnCooldownEnded?.Invoke(slotType);
+	}
+	
+	/// <summary>
+	/// 쿨타임 즉시 초기화 이벤트 호출
+	/// </summary>
+	public static void InvokeCooldownInstantReset(SkillSlotType slotType)
+	{
+		OnCooldownInstantReset?.Invoke(slotType);
 	}
 	
 	#endregion
@@ -121,6 +136,38 @@ public static class SkillUIEvents
 	
 	#endregion
 	
+	#region 스킬 아이콘 임시 변경 이벤트
+	
+	/// <summary>
+	/// 스킬 아이콘 임시 변경 이벤트 (모드 전환 시)
+	/// 매개변수: (슬롯 타입, 새 아이콘)
+	/// </summary>
+	public static event Action<SkillSlotType, Sprite> OnSkillIconTemporaryChanged;
+	
+	/// <summary>
+	/// 스킬 아이콘 복원 이벤트
+	/// 매개변수: (슬롯 타입)
+	/// </summary>
+	public static event Action<SkillSlotType> OnSkillIconRestored;
+	
+	/// <summary>
+	/// 스킬 아이콘 임시 변경 이벤트 호출
+	/// </summary>
+	public static void InvokeSkillIconTemporaryChanged(SkillSlotType slotType, Sprite newIcon)
+	{
+		OnSkillIconTemporaryChanged?.Invoke(slotType, newIcon);
+	}
+	
+	/// <summary>
+	/// 스킬 아이콘 복원 이벤트 호출
+	/// </summary>
+	public static void InvokeSkillIconRestored(SkillSlotType slotType)
+	{
+		OnSkillIconRestored?.Invoke(slotType);
+	}
+	
+	#endregion
+	
 	#region 유틸리티
 	
 	/// <summary>
@@ -132,9 +179,12 @@ public static class SkillUIEvents
 		OnCooldownStarted = null;
 		OnCooldownUpdated = null;
 		OnCooldownEnded = null;
+		OnCooldownInstantReset = null;
 		OnSkillAvailabilityChanged = null;
 		OnSkillUsed = null;
 		OnSkillUseFailed = null;
+		OnSkillIconTemporaryChanged = null;
+		OnSkillIconRestored = null;
 		
 		Debug.Log("[SkillUIEvents] 모든 스킬 UI 이벤트가 초기화되었습니다.");
 	}

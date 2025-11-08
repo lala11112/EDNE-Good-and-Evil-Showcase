@@ -28,6 +28,10 @@ public class PlayerController : EntityController
 
 	[Header("애니메이션")]
 	[SerializeField] private Animator animator;
+	
+	[Header("비주얼")]
+	[Tooltip("플레이어 스프라이트 렌더러 (깜빡임 효과용)")]
+	[SerializeField] private SpriteRenderer spriteRenderer;
 
 	[Header("카메라 쉐이크 (피격)")]
 	[Tooltip("피격 데미지에 따라 쉐이크 강도를 계산하는 SO")]
@@ -55,6 +59,9 @@ public class PlayerController : EntityController
 	
 	[Tooltip("최대 정신력")]
 	[SerializeField] private int maxMentalPower;
+	
+	[Tooltip("누적 회복량 (소수점 회복량 저장용, 1 이상이 되면 정수로 변환하여 적용)")]
+	private float accumulatedRegen = 0f;
 
 	#endregion
 
@@ -68,7 +75,7 @@ public class PlayerController : EntityController
 	[SerializeField] private CourageState currentCourageState;
 
 	[Tooltip("현재 스킬 랭크 (용기 단계에 따라 자동 결정)")]
-	[SerializeField] private SkillRank currentSkillRank;
+	[SerializeField] public SkillRank currentSkillRank;
 
 	#endregion
 
@@ -83,6 +90,41 @@ public class PlayerController : EntityController
 
 	[Tooltip("현재 이동 방향 (8방향)")]
 	[SerializeField] private MoveDirection currentMoveDirection = MoveDirection.None;
+
+	#endregion
+	
+	#region 런타임 상태 - 피격 무적
+	
+	// 깜빡임 효과 코루틴 참조
+	private Coroutine blinkCoroutine;
+
+	#endregion
+	
+	#region 런타임 상태 - 애니메이션
+	
+	[Header("애니메이션 트리거")]
+	[Tooltip("현재 재생 중인 공격 애니메이션이 있는지 여부")]
+	private bool isPlayingAttackAnimation = false;
+
+	#endregion
+
+	#region 런타임 상태 - 넉백
+
+	[Header("넉백 상태")]
+	[Tooltip("넉백 방향 (정규화된 벡터)")]
+	[SerializeField] private Vector2 knockbackDirection;
+
+	[Tooltip("넉백 초기 힘")]
+	[SerializeField] private float knockbackForce;
+
+	[Tooltip("넉백 지속 시간")]
+	[SerializeField] private float knockbackDuration;
+
+	[Tooltip("넉백 경과 시간")]
+	[SerializeField] private float knockbackElapsedTime;
+
+	[Tooltip("넉백 중인지 여부")]
+	[SerializeField] private bool isKnockedBack;
 
 	#endregion
 
@@ -142,13 +184,19 @@ public class PlayerController : EntityController
 		{
 			entityData = playerData;
 		}
+		
+		// SpriteRenderer 자동 할당
+		if (spriteRenderer == null)
+		{
+			spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+		}
 	}
 
 	protected override void Awake()
 	{
 		base.Awake();
 		
-		// ⭐ 싱글톤 설정
+		// 싱글톤 설정
 		if (Instance == null)
 		{
 			Instance = this;
@@ -170,6 +218,11 @@ public class PlayerController : EntityController
 		if (skillController == null)
 		{
 			skillController = GetComponent<SkillController>();
+		}
+		
+		if (spriteRenderer == null)
+		{
+			spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 		}
 
 		// Rigidbody2D 설정 (Dynamic + 즉시 반응)
@@ -227,11 +280,16 @@ public class PlayerController : EntityController
 		// 정신력 자동 회복
 		UpdateMentalPowerRegeneration(Time.deltaTime);
 
+		// 넉백 타이머 업데이트 (우선 처리)
+		UpdateKnockbackTimer(Time.deltaTime);
+
 		// 이동 입력 처리
 		UpdateMovementInput();
 
 		// 애니메이터 파라미터 업데이트
 		UpdateAnimatorParameters();
+
+
 	}
 
 	private void FixedUpdate()
@@ -321,18 +379,33 @@ public class PlayerController : EntityController
 	private void UpdateMentalPowerRegeneration(float deltaTime)
 	{
 		if (playerData == null) return;
-		if (currentMentalPower >= maxMentalPower) return;
+		if (currentMentalPower >= maxMentalPower) 
+		{
+			// 최대치에 도달하면 누적 회복량 초기화
+			accumulatedRegen = 0f;
+			return;
+		}
 		if (!isAlive) return;
 
-		// 회복량 계산
+		// 회복량 누적 (소수점 단위로 정확하게 계산)
 		int previousMentalPower = currentMentalPower;
 		float regenAmount = playerData.mentalPowerRegenRate * deltaTime;
-		currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + Mathf.RoundToInt(regenAmount));
+		accumulatedRegen += regenAmount;
 		
-		// 실제로 회복되었을 때만 이벤트 발생
-		if (currentMentalPower != previousMentalPower)
+		// 누적 회복량이 1 이상이 되면 정수로 변환하여 적용
+		if (accumulatedRegen >= 1f)
 		{
-			PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			int regenToApply = Mathf.FloorToInt(accumulatedRegen); // 소수점 버림
+			accumulatedRegen -= regenToApply; // 적용한 만큼 차감
+			
+			// 정신력 회복 (최대치 초과 방지)
+			currentMentalPower = Mathf.Min(maxMentalPower, currentMentalPower + regenToApply);
+			
+			// 실제로 회복되었을 때만 이벤트 발생
+			if (currentMentalPower != previousMentalPower)
+			{
+				PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			}
 		}
 	}
 
@@ -533,7 +606,105 @@ public class PlayerController : EntityController
 		}
 	}
 
+	#endregion
+
+	#region 넉백 시스템
+
 	/// <summary>
+	/// 넉백 적용
+	/// 트랩 등에서 호출하여 플레이어를 넉백시킵니다.
+	/// </summary>
+	/// <param name="direction">넉백 방향 (정규화하지 않아도 됨)</param>
+	/// <param name="force">넉백 힘</param>
+	/// <param name="duration">넉백 지속 시간 (초)</param>
+	public void ApplyKnockback(Vector2 direction, float force, float duration)
+	{
+		if (!isAlive) return; // 사망 시 넉백 불가
+		if (force <= 0f || duration <= 0f) return; // 유효하지 않은 값 무시
+
+		// 넉백 데이터 설정
+		knockbackDirection = direction.normalized; // 방향 정규화
+		knockbackForce = force;
+		knockbackDuration = duration;
+		knockbackElapsedTime = 0f;
+		isKnockedBack = true;
+
+		Debug.Log($"[PlayerController] 넉백 적용 - 방향: {knockbackDirection}, 힘: {force}, 시간: {duration}초");
+	}
+
+	/// <summary>
+	/// 넉백 타이머 업데이트
+	/// </summary>
+	/// <param name="deltaTime">델타 타임</param>
+	private void UpdateKnockbackTimer(float deltaTime)
+	{
+		if (!isKnockedBack) return;
+
+		// 경과 시간 증가
+		knockbackElapsedTime += deltaTime;
+
+		// 넉백 시간 종료 체크
+		if (knockbackElapsedTime >= knockbackDuration)
+		{
+			// 넉백 종료
+			EndKnockback();
+		}
+	}
+
+	/// <summary>
+	/// 넉백 처리 (FixedUpdate에서 호출)
+	/// 감쇠 처리 포함
+	/// </summary>
+	private void ProcessKnockback()
+	{
+		if (!isKnockedBack) return;
+
+		// 감쇠 계산 (시간이 지날수록 힘이 감소)
+		// 선형 감쇠: 1.0 → 0.0 (시간에 비례)
+		float dampingFactor = 1f - (knockbackElapsedTime / knockbackDuration);
+		
+		// 최소값 보장 (0보다 크게 유지)
+		dampingFactor = Mathf.Max(0f, dampingFactor);
+
+		// 현재 넉백 힘 계산 (초기 힘 × 감쇠 계수)
+		float currentForce = knockbackForce * dampingFactor;
+
+		// 넉백 velocity 적용
+		rb.linearVelocity = knockbackDirection * currentForce;
+
+		// 이동 방향은 None으로 설정 (넉백 중에는 이동 입력 무시)
+		currentMoveDirection = MoveDirection.None;
+	}
+
+	/// <summary>
+	/// 넉백 종료
+	/// </summary>
+	private void EndKnockback()
+	{
+		isKnockedBack = false;
+		knockbackElapsedTime = 0f;
+		knockbackForce = 0f;
+		knockbackDuration = 0f;
+
+		// 넉백 종료 시 속도는 0으로 설정 (이동 입력이 없으면 정지)
+		// 이동 입력이 있으면 다음 ProcessMovement에서 처리됨
+		rb.linearVelocity = Vector2.zero;
+
+		Debug.Log("[PlayerController] 넉백 종료");
+	}
+
+	/// <summary>
+	/// 넉백 중인지 확인
+	/// </summary>
+	/// <returns>넉백 중 여부</returns>
+	public bool IsKnockedBack()
+	{
+		return isKnockedBack;
+	}
+
+	/// <summary>
+	/// 애니메이터 파라미터 및 스프라이트 방향 업데이트
+	/// </summary>
 	private void UpdateAnimatorParameters()
 	{
 		if (animator == null) return;
@@ -544,11 +715,47 @@ public class PlayerController : EntityController
 		animator.SetBool("isMove", isMoving);
 		animator.SetFloat("InputX", dir.x);
 		animator.SetFloat("InputY", dir.y);
+		
+		// ⭐ 스프라이트 방향 전환 (왼쪽/오른쪽)
+		UpdateSpriteDirection(dir);
+	}
+	
+	/// <summary>
+	/// 스프라이트 방향 전환 (좌우 반전)
+	/// </summary>
+	/// <param name="direction">현재 이동 방향</param>
+	private void UpdateSpriteDirection(Vector2 direction)
+	{
+		if (spriteRenderer == null) return;
+		
+		// X 방향이 거의 0이면 방향 전환하지 않음 (위/아래 이동 시)
+		if (Mathf.Abs(direction.x) < 0.01f) return;
+		
+		// 왼쪽으로 이동 시 스프라이트 반전
+		if (direction.x < 0)
+		{
+			spriteRenderer.flipX = true; // 왼쪽 보기
+		}
+		// 오른쪽으로 이동 시 스프라이트 원래대로
+		else if (direction.x > 0)
+		{
+			spriteRenderer.flipX = false; // 오른쪽 보기 (기본)
+		}
 	}
 
+	/// <summary>
+	/// 물리 기반 이동 처리
 	/// </summary>
 	private void ProcessMovement()
 	{
+		// ⭐ 넉백 우선 처리 (이동 입력 체크 전에 처리)
+		// 넉백 중에는 넉백 처리만 하고 일반 이동 처리는 하지 않음
+		if (isKnockedBack)
+		{
+			ProcessKnockback();
+			return; // 넉백 중에는 일반 이동 처리 건너뛰기
+		}
+
 		// 이동 불가 상태 체크
 		if (!CanMove())
 		{
@@ -685,6 +892,21 @@ public class PlayerController : EntityController
 	#region 스킬 연동
 
 	/// <summary>
+	/// 이동 가능 여부 체크 (오버라이드)
+	/// EntityController의 기본 체크에 넉백 체크 추가
+	/// </summary>
+	public override bool CanMove()
+	{
+		// 기본 체크 (생존, 상태효과)
+		if (!base.CanMove()) return false;
+
+		// 넉백 중에는 이동 입력 차단 (넉백 자체는 ProcessKnockback에서 처리)
+		if (isKnockedBack) return false;
+
+		return true;
+	}
+
+	/// <summary>
 	/// 스킬 사용 가능 여부 체크 (오버라이드)
 	/// EntityController의 기본 체크에 정신력 체크 추가
 	/// </summary>
@@ -692,6 +914,9 @@ public class PlayerController : EntityController
 	{
 		// 기본 체크 (생존, 상태효과)
 		if (!base.CanUseSkill()) return false;
+
+		// 넉백 중에는 스킬 사용 불가
+		if (isKnockedBack) return false;
 
 		// 정신력 체크는 개별 스킬에서 수행
 		// 여기서는 기본 조건만 체크
@@ -732,6 +957,70 @@ public class PlayerController : EntityController
 		{
 			hitShake.ApplyShake(camShake, damageAmount);
 		}
+		
+		// ⭐ 피격 애니메이션 재생
+		if (animator != null && isAlive)
+		{
+			animator.SetTrigger("Hurt");
+		}
+		
+		// ⭐ 피격 후 무적 시간 부여
+		if (playerData != null && playerData.hitInvincibilityDuration > 0f)
+		{
+			ApplyHitInvincibility();
+		}
+	}
+	
+	/// <summary>
+	/// 피격 무적 시간 적용 (무적 + 깜빡임 효과)
+	/// </summary>
+	private void ApplyHitInvincibility()
+	{
+		if (playerData == null) return;
+		
+		// 무적 시간 설정
+		SetInvincibleForDuration(playerData.hitInvincibilityDuration);
+		
+		// 깜빡임 효과 시작
+		if (playerData.useBlinkEffect && spriteRenderer != null)
+		{
+			// 기존 깜빡임 코루틴이 있으면 중지
+			if (blinkCoroutine != null)
+			{
+				StopCoroutine(blinkCoroutine);
+			}
+			
+			blinkCoroutine = StartCoroutine(BlinkEffect(playerData.hitInvincibilityDuration));
+		}
+	}
+	
+	/// <summary>
+	/// 스프라이트 깜빡임 효과 코루틴 (빨간색으로 변경)
+	/// </summary>
+	private System.Collections.IEnumerator BlinkEffect(float duration)
+	{
+		if (spriteRenderer == null || playerData == null) yield break;
+		
+		// 원래 색상 저장
+		Color originalColor = spriteRenderer.color;
+		
+		float elapsed = 0f;
+		bool isHitColor = false;
+		
+		while (elapsed < duration)
+		{
+			// 깜빡임 주기마다 색상 토글
+			yield return new WaitForSeconds(playerData.blinkInterval);
+			
+			isHitColor = !isHitColor;
+			spriteRenderer.color = isHitColor ? playerData.hitColor : originalColor;
+			
+			elapsed += playerData.blinkInterval;
+		}
+		
+		// 무적 시간 종료 - 원래 색상으로 복구
+		spriteRenderer.color = originalColor;
+		blinkCoroutine = null;
 	}
 	
 	/// <summary>
@@ -785,8 +1074,56 @@ public class PlayerController : EntityController
 			animator.SetTrigger("Death");
 		}
 		
+		// ⭐ 사망 이펙트 생성
+		SpawnDeathEffect();
+		
 		// 플레이어 사망 이벤트 발생 (GameOverUI가 구독 중)
 		OnPlayerDied?.Invoke();
+	}
+	
+	/// <summary>
+	/// 플레이어 사망 이펙트 생성
+	/// </summary>
+	private void SpawnDeathEffect()
+	{
+		if (playerData == null) return;
+		
+		Vector3 deathPosition = transform.position;
+		
+		// 1. 사망 이펙트 프리팹 생성
+		if (playerData.deathEffectPrefab != null)
+		{
+			GameObject effectObj = Instantiate(playerData.deathEffectPrefab, deathPosition, Quaternion.identity);
+			
+			// 지속 시간 후 자동 삭제
+			Destroy(effectObj, playerData.deathEffectDuration);
+			
+			Debug.Log($"[PlayerController] 사망 이펙트 생성: {playerData.deathEffectPrefab.name}");
+		}
+		
+		// 2. 사망 사운드 재생
+		if (playerData.deathSound != null)
+		{
+			AudioSource audioSource = GetComponent<AudioSource>();
+			if (audioSource == null)
+			{
+				audioSource = gameObject.AddComponent<AudioSource>();
+				audioSource.playOnAwake = false;
+				audioSource.spatialBlend = 0f; // 2D 사운드
+			}
+			audioSource.PlayOneShot(playerData.deathSound);
+			
+			Debug.Log($"[PlayerController] 사망 사운드 재생: {playerData.deathSound.name}");
+		}
+		
+		// 3. 카메라 쉐이크
+		if (playerData.deathCameraShakeStrength > 0f && hitShake != null && camShake != null)
+		{
+			// 사망 시 강한 쉐이크 (데미지 배율 적용)
+			hitShake.ApplyShake(camShake, Mathf.RoundToInt(playerData.deathCameraShakeStrength * 10));
+			
+			Debug.Log($"[PlayerController] 사망 카메라 쉐이크: 강도 {playerData.deathCameraShakeStrength}");
+		}
 	}
 	
 	/// <summary>
@@ -857,6 +1194,46 @@ public class PlayerController : EntityController
 		// UpdateCourageState();
 	}
 
+	#endregion
+	
+	#region 애니메이션 제어
+	
+	/// <summary>
+	/// 공격 애니메이션 재생 (스킬 핸들러에서 호출)
+	/// </summary>
+	/// <param name="attackIndex">공격 애니메이션 인덱스 (1~4)</param>
+	public void PlayAttackAnimation(int attackIndex)
+	{
+		if (animator == null) return;
+		if (attackIndex < 1 || attackIndex > 4)
+		{
+			Debug.LogWarning($"[PlayerController] 잘못된 공격 애니메이션 인덱스: {attackIndex} (1~4만 유효)");
+			return;
+		}
+		
+		animator.SetTrigger($"Attack{attackIndex}");
+		isPlayingAttackAnimation = true;
+		
+		Debug.Log($"[PlayerController] Attack{attackIndex} 애니메이션 재생");
+	}
+	
+	/// <summary>
+	/// 공격 애니메이션 종료 (애니메이션 이벤트에서 호출)
+	/// </summary>
+	public void OnAttackAnimationEnd()
+	{
+		isPlayingAttackAnimation = false;
+		Debug.Log("[PlayerController] 공격 애니메이션 종료");
+	}
+	
+	/// <summary>
+	/// 현재 공격 애니메이션 재생 중인지 확인
+	/// </summary>
+	public bool IsPlayingAttackAnimation()
+	{
+		return isPlayingAttackAnimation;
+	}
+	
 	#endregion
 
 	#region 디버그 및 유틸리티
