@@ -40,6 +40,9 @@ public class ShurikenProjectile : MonoBehaviour, ISkillProjectile
 	[Tooltip("관통 여부")]
 	private bool isPiercing = false;
 	
+	[Tooltip("스킬 슬롯 타입 (용기 시스템용)")]
+	private SkillSlotType? skillSlotType = null;
+	
 	#endregion
 	
 	#region 표식 설정
@@ -157,6 +160,22 @@ public class ShurikenProjectile : MonoBehaviour, ISkillProjectile
 		this.isPiercing = isPiercing;
 	}
 	
+	/// <summary>
+	/// 스킬 슬롯 타입 설정 (용기 시스템용)
+	/// </summary>
+	public void SetSkillSlotType(SkillSlotType slotType)
+	{
+		this.skillSlotType = slotType;
+	}
+	
+	/// <summary>
+	/// 스킬 슬롯 타입 가져오기 (ISkillProjectile 인터페이스 구현)
+	/// </summary>
+	public SkillSlotType? GetSkillSlotType()
+	{
+		return skillSlotType;
+	}
+	
 	#endregion
 	
 	#region 표식 설정
@@ -192,8 +211,8 @@ public class ShurikenProjectile : MonoBehaviour, ISkillProjectile
 		// 이미 죽은 적은 무시
 		if (!target.IsAlive) return;
 		
-		// 데미지 적용
-		target.ApplyDamage((int)damage, attackerType);
+		// 데미지 적용 (프로젝타일 자체를 데미지 소스로 전달)
+		target.ApplyDamage((int)damage, attackerType, this);
 		
 		// 표식 적용
 		if (markEffect != null)

@@ -256,6 +256,18 @@ public class SkillSlot : MonoBehaviour
         
         handler.Use(rank);
         
+        // ⭐ S랭크 스킬 사용 시 용기 시스템 초기화
+        if (rank == SkillRank.S && playerController != null)
+        {
+            playerController.OnUltimateSkillUsed();
+        }
+        
+        // ⭐ PlayerController에 스킬 사용 알림 (스킬 연계 판정용)
+        if (playerController != null)
+        {
+            playerController.OnSkillUsed(slotType);
+        }
+        
         // ⭐ 쿨타임 시작
         // - FaithDash: 재사용 모드 종료 시 시작 (자체 관리)
         // - RainOfFaith: 설치/폭발 단계별로 자체 관리

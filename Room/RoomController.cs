@@ -171,6 +171,8 @@ public class RoomController : MonoBehaviour
         if(isRoomFirstEntered) return;
         PlayerController playerController = other.GetComponent<PlayerController>();
         if(playerController != null){
+            // ⭐ 플레이어가 방에 진입했을 때 현재 방 컨트롤러 설정
+            playerController.SetCurrentRoomController(this);
             EnterRoom();
         }
     }
@@ -457,7 +459,7 @@ public class RoomController : MonoBehaviour
     }
 
     /// <summary>
-    /// 몬스터 등록
+    /// 몬스터 등록 (스폰 시 호출)
     /// </summary>
     public void RegisterMonster(MonsterController monster)
     {
@@ -477,6 +479,12 @@ public class RoomController : MonoBehaviour
             for (int i = 0; i < currentMonsters.Count; i++)
             {
                 Debug.Log($"  {i + 1}. {currentMonsters[i]?.name ?? "null"}");
+            }
+            
+            // ⭐ PlayerController에 몬스터 이벤트 구독 요청
+            if (PlayerController.Instance != null)
+            {
+                PlayerController.Instance.SubscribeMonsterDeathEvent(monster);
             }
         }
         else

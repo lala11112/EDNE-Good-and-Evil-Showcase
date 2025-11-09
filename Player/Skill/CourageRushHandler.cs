@@ -203,6 +203,14 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		}
 	}
 	
+	/// <summary>
+	/// 스킬 슬롯 타입 가져오기 (용기 시스템용)
+	/// </summary>
+	public SkillSlotType? GetSkillSlotType()
+	{
+		return skillSlot != null ? skillSlot.SlotType : null;
+	}
+	
 	public void Use(SkillRank rank)
 	{
 		if (skillData == null || playerController == null)

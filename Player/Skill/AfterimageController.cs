@@ -27,6 +27,9 @@ public class AfterimageController : MonoBehaviour
 	[Tooltip("활성화 여부 (폭발 모드 실행 여부)")]
 	private bool isActivated = false;
 	
+	[Tooltip("스킬 슬롯 타입 (용기 시스템용)")]
+	private SkillSlotType? skillSlotType = null;
+	
 	#endregion
 	
 	#region 폭발 모드 (돌진 공격)
@@ -171,7 +174,7 @@ public class AfterimageController : MonoBehaviour
 	/// <summary>
 	/// 잔상 초기화 (비활성 상태로 설치)
 	/// </summary>
-	public void SetupAsInactive(float damage, bool isSRankMode, Sprite playerSprite = null)
+	public void SetupAsInactive(float damage, bool isSRankMode, Sprite playerSprite = null, SkillSlotType? skillSlotType = null)
 	{
 		this.damage = damage;
 		this.isSRankMode = isSRankMode;
@@ -179,6 +182,7 @@ public class AfterimageController : MonoBehaviour
 		this.isTriggered = false;
 		this.hasReachedTarget = false;
 		this.targetEnemy = null;
+		this.skillSlotType = skillSlotType;
 		
 		// 플레이어 스프라이트 복사
 		if (spriteRenderer != null && playerSprite != null)
@@ -222,6 +226,14 @@ public class AfterimageController : MonoBehaviour
 		}
 		
 		Debug.Log($"[AfterimageController] 💥 활성화! 대상: {targetEnemy.name}");
+	}
+	
+	/// <summary>
+	/// 스킬 슬롯 타입 가져오기 (용기 시스템용)
+	/// </summary>
+	public SkillSlotType? GetSkillSlotType()
+	{
+		return skillSlotType;
 	}
 	
 	/// <summary>
@@ -320,7 +332,8 @@ public class AfterimageController : MonoBehaviour
 			// 일반: 단일 타겟 데미지
 			if (targetEnemy != null && targetEnemy.IsAlive)
 			{
-				targetEnemy.ApplyDamage((int)damage, EntityType.Player);
+				// ⭐ 자기 자신을 데미지 소스로 전달 (용기 시스템용)
+				targetEnemy.ApplyDamage((int)damage, EntityType.Player, this);
 				Debug.Log($"[AfterimageController] ⚔️ 회전 참격 완료! {targetEnemy.name}에게 {(int)damage} 데미지!");
 			}
 		}
@@ -352,7 +365,8 @@ public class AfterimageController : MonoBehaviour
 			EntityController entity = hit.GetComponent<EntityController>();
 			if (entity != null && entity.EntityType != EntityType.Player && entity.IsAlive)
 			{
-				entity.ApplyDamage((int)explosionDamage, EntityType.Player);
+				// ⭐ 자기 자신을 데미지 소스로 전달 (용기 시스템용)
+				entity.ApplyDamage((int)explosionDamage, EntityType.Player, this);
 			}
 		}
 		

@@ -347,13 +347,4 @@ public class SkillController : MonoBehaviour
     #endregion
 }
 
-// 스킬 슬롯 타입 열거형 (새로 추가)
-public enum SkillSlotType
-{
-    Z, X, C, V
-}
-
-
-public enum SkillRank { D, C, B, A, S }
-
 // ⭐ SkillHandlerInterface는 Core/SkillHandlerInterface.cs로 이동됨

@@ -393,6 +393,12 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			shuriken.SetOwnerController(playerController);
 			shuriken.SetMarkEffect(markEffect);
 			
+			// ⭐ 스킬 슬롯 타입 설정 (용기 시스템용)
+			if (skillSlot != null)
+			{
+				shuriken.SetSkillSlotType(skillSlot.SlotType);
+			}
+			
 			// S랭크면 관통 적용
 			if (isInSRankMode)
 			{
