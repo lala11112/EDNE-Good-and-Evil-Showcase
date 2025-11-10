@@ -129,26 +129,51 @@ public class SkillController : MonoBehaviour
     }
     
     // 스킬 사용 이벤트들 (현재 스킬 랭크 전달)
+    // 다이얼로그 중에는 스킬 발동을 차단합니다
     private void OnSkillZPerformed(InputAction.CallbackContext context)
     {
+        // DialogueInputHandler.IsDialogueActive가 true이면 입력을 무시 (다이얼로그 중)
+        if (DialogueInputHandler.IsDialogueActive)
+        {
+            return;
+        }
+        
         SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
         zSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillXPerformed(InputAction.CallbackContext context)
     {
+        // DialogueInputHandler.IsDialogueActive가 true이면 입력을 무시 (다이얼로그 중)
+        if (DialogueInputHandler.IsDialogueActive)
+        {
+            return;
+        }
+        
         SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
         xSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillCPerformed(InputAction.CallbackContext context)
     {
+        // DialogueInputHandler.IsDialogueActive가 true이면 입력을 무시 (다이얼로그 중)
+        if (DialogueInputHandler.IsDialogueActive)
+        {
+            return;
+        }
+        
         SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
         cSlot?.ExecuteSkill(rank);
     }
     
     private void OnSkillVPerformed(InputAction.CallbackContext context)
     {
+        // DialogueInputHandler.IsDialogueActive가 true이면 입력을 무시 (다이얼로그 중)
+        if (DialogueInputHandler.IsDialogueActive)
+        {
+            return;
+        }
+        
         SkillRank rank = playerController != null ? playerController.currentSkillRank : SkillRank.D;
         vSlot?.ExecuteSkill(rank);
     }

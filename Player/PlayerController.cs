@@ -1763,9 +1763,17 @@ public class PlayerController : EntityController
 
 	/// <summary>
 	/// 이동 입력 업데이트
+	/// 다이얼로그 중에는 입력을 받지 않습니다
 	/// </summary>
 	private void UpdateMovementInput()
 	{
+		// 다이얼로그가 진행 중이면 이동 입력을 받지 않음
+		if (DialogueInputHandler.IsDialogueActive)
+		{
+			moveInput = Vector2.zero;
+			return;
+		}
+		
 		if (moveAction != null)
 		{
 			moveInput = moveAction.ReadValue<Vector2>();
