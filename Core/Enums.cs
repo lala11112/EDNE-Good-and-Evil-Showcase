@@ -111,3 +111,28 @@ public enum ItemRank
     A,
     S   // 최상 랭크
 }
+
+/// <summary>
+/// 구체적인 아이템 식별자 (Specific Item Identifier)
+/// 아이템의 구체적인 종류를 식별합니다.
+/// </summary>
+public enum ItemIdentifier
+{
+    /// <summary>기본 아이템 (미분류)</summary>
+    None = 0,
+    
+    /// <summary>S랭크 운명의 주사위</summary>
+    Dice = 1,
+    
+    /// <summary>A랭크 확신의 사슬</summary>
+    Chain = 2,
+    
+    /// <summary>B랭크 스텔라 프로토콜</summary>
+    Stella = 3,
+    
+    /// <summary>C랭크 심작박동</summary>
+    Heartbeat = 4,
+    
+    /// <summary>포션 등 기타 아이템</summary>
+    Other = 99
+}

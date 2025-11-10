@@ -29,6 +29,9 @@ public class ItemDataSO : ScriptableObject
     [Tooltip("아이템 타입 (소비/장비)")]
     public ItemType itemType = ItemType.Consumable;
     
+    [Tooltip("구체적인 아이템 식별자 (Dice, Chain, Stella, Heartbeat 등)")]
+    public ItemIdentifier itemIdentifier = ItemIdentifier.None;
+    
     [Header("상호작용 설정")]
     [Tooltip("상호작용 가능 거리 (플레이어가 이 거리 내에 들어오면 UI 표시)")]
     [Range(0.5f, 5f)]

@@ -202,6 +202,12 @@ public class RoomController : MonoBehaviour
         // 첫 번째 웨이브 시작
         StartCoroutine(StartFirstWave());
 
+        // ItemController에 방 진입 알림 (운명의 주사위 효과 재생성)
+        if (ItemController.Instance != null)
+        {
+            ItemController.Instance.OnRoomEntered();
+        }
+
         OnRoomEntered?.Invoke(this);
         Debug.Log($"[RoomController] {roomData.roomName}에 진입했습니다.");
     }
@@ -460,6 +466,12 @@ public class RoomController : MonoBehaviour
 
         // 아이템 스폰
         SpawnItems();
+
+        // ItemController에 방 클리어 알림 (운명의 주사위 효과 재생성)
+        if (ItemController.Instance != null)
+        {
+            ItemController.Instance.OnRoomCleared();
+        }
 
         OnRoomCleared?.Invoke(this);
         Debug.Log($"[RoomController] {roomData.roomName} 클리어!");
