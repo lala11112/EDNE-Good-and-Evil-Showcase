@@ -7,14 +7,13 @@ namespace EDNE.UI
     /// <summary>
     /// 옵션 패널 공통 컨트롤러
     /// TitleUIController와 GameUIController의 중복 코드를 통합
-    /// - 볼륨 슬라이더 관리 (Master, BGM, SFX)
+    /// - 볼륨 슬라이더 관리 (BGM, SFX)
     /// - 전체화면 토글 관리
     /// - 패널 닫기 버튼 관리
     /// </summary>
     public class OptionPanelController : MonoBehaviour
     {
         [Header("Volume Sliders")]
-        [SerializeField] private Slider masterVolumeSlider;
         [SerializeField] private Slider bgmVolumeSlider;
         [SerializeField] private Slider sfxVolumeSlider;
 
@@ -47,13 +46,6 @@ namespace EDNE.UI
         /// </summary>
         private void InitializeVolumeSliders()
         {
-            // 마스터 볼륨
-            if (masterVolumeSlider != null)
-            {
-                masterVolumeSlider.value = UIManager.Instance.GetMasterVolume();
-                masterVolumeSlider.onValueChanged.AddListener(OnMasterVolumeChanged);
-            }
-
             // BGM 볼륨
             if (bgmVolumeSlider != null)
             {
@@ -100,11 +92,6 @@ namespace EDNE.UI
         }
 
         #region Event Handlers
-
-        private void OnMasterVolumeChanged(float value)
-        {
-            UIManager.Instance.SetMasterVolume(value);
-        }
 
         private void OnBGMVolumeChanged(float value)
         {
