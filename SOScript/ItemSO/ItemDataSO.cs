@@ -15,6 +15,9 @@ public class ItemDataSO : ScriptableObject
     [Tooltip("아이템 이름 (UI 표시용)")]
     public string itemName;
     
+    [Tooltip("아이템 랭크 (UI 표시용)")]
+    public ItemRank itemRank = ItemRank.D;
+    
     [Tooltip("아이템 설명 (UI 표시용)")]
     [TextArea(3, 5)]
     public string itemDescription;

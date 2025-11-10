@@ -99,3 +99,15 @@ public enum ItemType
     Consumable, // 소비 아이템 (즉시 효과 적용, 인벤토리 등록 안 함)
     Equipment   // 장비 아이템 (지속 효과 적용, 인벤토리에 등록)
 }
+
+/// <summary>
+/// 아이템 랭크 (Item Rank)
+/// </summary>
+public enum ItemRank
+{
+    D,  // 최하 랭크
+    C,
+    B,
+    A,
+    S   // 최상 랭크
+}

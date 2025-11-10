@@ -45,6 +45,7 @@ public class PlayerController : EntityController
 	[SerializeField] private InputActionAsset inputActions;
 	
 	private InputAction moveAction;
+	private InputAction interactAction; // E키 입력 (아이템 상호작용)
 	
 	// 또는 Generated C# Class를 사용하는 경우:
 	// private PlayerInputActions playerInput;
@@ -210,6 +211,15 @@ public class PlayerController : EntityController
 
 	#endregion
 
+	#region 런타임 상태 - 아이템 상호작용
+
+	/// <summary>
+	/// 플레이어 주변의 상호작용 가능한 아이템 리스트
+	/// </summary>
+	private List<ItemBase> nearbyItems = new List<ItemBase>();
+
+	#endregion
+
 	#region 이벤트
 
 	/// <summary>
@@ -313,7 +323,25 @@ public class PlayerController : EntityController
 		// Input Actions 초기화
 		if (inputActions != null)
 		{
-			moveAction = inputActions.FindAction("Move");
+			// Player Action Map 찾기
+			var playerMap = inputActions.FindActionMap("Player");
+			if (playerMap != null)
+			{
+				moveAction = playerMap.FindAction("Move");
+				interactAction = playerMap.FindAction("Interact");
+			}
+			else
+			{
+				// Action Map 없이 직접 찾기 (레거시 방식)
+				moveAction = inputActions.FindAction("Move");
+				interactAction = inputActions.FindAction("Interact");
+			}
+			
+			// E키 입력 이벤트 등록
+			if (interactAction != null)
+			{
+				interactAction.performed += OnInteractPerformed;
+			}
 		}
 
 		// Animator 자동 할당
@@ -336,6 +364,14 @@ public class PlayerController : EntityController
 		// Input Actions 활성화
 		if (inputActions != null)
 		{
+			// Player Action Map 활성화
+			var playerMap = inputActions.FindActionMap("Player");
+			if (playerMap != null)
+			{
+				playerMap.Enable();
+			}
+			
+			// 전체 InputActionAsset 활성화
 			inputActions.Enable();
 		}
 	}
@@ -346,6 +382,12 @@ public class PlayerController : EntityController
 		if (inputActions != null)
 		{
 			inputActions.Disable();
+		}
+		
+		// E키 입력 이벤트 해제
+		if (interactAction != null)
+		{
+			interactAction.performed -= OnInteractPerformed;
 		}
 		
 		// ⭐ 개선 #15: 이벤트 구독 해제
@@ -2547,6 +2589,91 @@ public class PlayerController : EntityController
 	private void DebugRestoreMentalPower()
 	{
 		RestoreMentalPower(maxMentalPower);
+	}
+
+	#endregion
+
+	#region 아이템 상호작용 시스템
+
+	/// <summary>
+	/// E키 입력 처리 (아이템 상호작용)
+	/// </summary>
+	private void OnInteractPerformed(InputAction.CallbackContext context)
+	{
+		// 가장 가까운 아이템과 상호작용
+		InteractWithItem();
+	}
+
+	/// <summary>
+	/// 아이템과 상호작용 (가장 가까운 아이템 선택)
+	/// </summary>
+	private void InteractWithItem()
+	{
+		// 주변 아이템이 없으면 무시
+		if (nearbyItems.Count == 0) return;
+
+		// 가장 가까운 아이템 찾기
+		ItemBase closestItem = GetClosestItem();
+		if (closestItem == null) return;
+
+		// 이미 획득한 아이템이면 무시
+		if (closestItem.IsAcquired) return;
+
+		// 아이템 획득 처리
+		closestItem.AcquireItem();
+	}
+
+	/// <summary>
+	/// 가장 가까운 아이템 찾기
+	/// </summary>
+	/// <returns>가장 가까운 아이템 (없으면 null)</returns>
+	private ItemBase GetClosestItem()
+	{
+		if (nearbyItems.Count == 0) return null;
+
+		ItemBase closestItem = null;
+		float closestDistance = float.MaxValue;
+		Vector2 playerPosition = transform.position;
+
+		// 유효한 아이템만 필터링 (획득하지 않은 아이템만)
+		foreach (var item in nearbyItems)
+		{
+			if (item == null || item.IsAcquired) continue;
+
+			float distance = Vector2.Distance(playerPosition, item.transform.position);
+			if (distance < closestDistance)
+			{
+				closestDistance = distance;
+				closestItem = item;
+			}
+		}
+
+		return closestItem;
+	}
+
+	/// <summary>
+	/// 아이템이 범위 내에 진입했을 때 호출 (ItemBase에서 호출)
+	/// </summary>
+	/// <param name="item">진입한 아이템</param>
+	public void RegisterNearbyItem(ItemBase item)
+	{
+		if (item == null) return;
+
+		// 이미 등록되어 있으면 무시
+		if (nearbyItems.Contains(item)) return;
+
+		nearbyItems.Add(item);
+	}
+
+	/// <summary>
+	/// 아이템이 범위 밖으로 나갔을 때 호출 (ItemBase에서 호출)
+	/// </summary>
+	/// <param name="item">나간 아이템</param>
+	public void UnregisterNearbyItem(ItemBase item)
+	{
+		if (item == null) return;
+
+		nearbyItems.Remove(item);
 	}
 
 	#endregion

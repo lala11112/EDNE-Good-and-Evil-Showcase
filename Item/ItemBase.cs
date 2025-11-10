@@ -1,14 +1,14 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// 아이템 베이스 클래스
 /// 모든 아이템의 기본 기능을 제공합니다.
-/// - 감지 범위 체크
-/// - F키 입력 감지
+/// - 감지 범위 체크 (Trigger 사용)
 /// - UI 표시/숨김
 /// - 아이템 획득 처리
 /// - 아이템 삭제 기능
+/// 
+/// ⭐ E키 입력은 PlayerController에서 중앙화 처리됩니다.
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
 public abstract class ItemBase : MonoBehaviour
@@ -17,24 +17,20 @@ public abstract class ItemBase : MonoBehaviour
     [Tooltip("아이템 데이터 (ScriptableObject)")]
     [SerializeField] protected ItemDataSO itemData;
     
-    [Header("입력 시스템")]
-    [Tooltip("Input Action Asset (F키 입력 감지용)")]
-    [SerializeField] protected InputActionAsset inputActions;
-    
     [Header("UI 참조")]
-    [Tooltip("아이템 설명 UI (선택적, 없으면 자동 생성)")]
-    [SerializeField] protected GameObject itemInfoUI;
+    [Tooltip("아이템 정보 UI (ItemInfoUI 컴포넌트가 있는 GameObject, null이면 씬에서 자동으로 찾습니다)")]
+    [SerializeField] protected ItemInfoUI itemInfoUI;
     
     // 컴포넌트 참조
     protected Collider2D itemCollider;
-    
-    // 입력 액션
-    protected InputAction interactAction;
     
     // 상태
     protected bool isPlayerInRange = false;
     protected bool isAcquired = false;
     protected PlayerController playerController;
+    
+    // UI 찾기 캐시 (성능 최적화)
+    private static ItemInfoUI cachedItemInfoUI = null;
     
     #region Unity Lifecycle
     
@@ -50,63 +46,24 @@ public abstract class ItemBase : MonoBehaviour
         // Collider를 Trigger로 설정
         itemCollider.isTrigger = true;
         
-        // Input Actions 초기화
-        if (inputActions != null)
+        // Collider 크기를 interactionRange에 맞춰 자동 설정
+        if (itemData != null && itemCollider is CircleCollider2D circleCollider)
         {
-            interactAction = inputActions.FindAction("Interact");
+            circleCollider.radius = itemData.interactionRange;
         }
         
         // PlayerController 찾기
         playerController = PlayerController.Instance;
     }
     
-    protected virtual void OnEnable()
-    {
-        // Input Actions 활성화
-        if (inputActions != null)
-        {
-            inputActions.Enable();
-        }
-        
-        // 이벤트 등록
-        if (interactAction != null)
-        {
-            interactAction.performed += OnInteractPerformed;
-        }
-    }
-    
-    protected virtual void OnDisable()
-    {
-        // 이벤트 해제
-        if (interactAction != null)
-        {
-            interactAction.performed -= OnInteractPerformed;
-        }
-        
-        // Input Actions 비활성화
-        if (inputActions != null)
-        {
-            inputActions.Disable();
-        }
-    }
-    
     protected virtual void Update()
     {
         if (isAcquired) return;
         
-        // 플레이어가 범위 내에 있는지 체크
-        CheckPlayerInRange();
-        
-        // 범위 내에 있으면 UI 표시, 없으면 숨김
+        // 플레이어가 범위 내에 있으면 UI 표시, 없으면 숨김
         if (isPlayerInRange)
         {
             ShowItemInfo();
-            
-            // F키 입력 체크 (InputActionAsset이 없을 때 직접 키 입력 감지)
-            if (interactAction == null)
-            {
-                CheckDirectKeyInput();
-            }
         }
         else
         {
@@ -116,35 +73,51 @@ public abstract class ItemBase : MonoBehaviour
     
     #endregion
     
-    #region 상호작용 범위 체크
+    #region Trigger 이벤트 (PlayerController 등록/해제)
     
     /// <summary>
-    /// 플레이어가 상호작용 범위 내에 있는지 체크
+    /// 플레이어가 Trigger 범위 내에 진입했을 때 호출
     /// </summary>
-    protected virtual void CheckPlayerInRange()
+    protected virtual void OnTriggerEnter2D(Collider2D other)
     {
-        if (playerController == null || itemData == null) return;
+        // 플레이어인지 확인
+        if (playerController == null || other.gameObject != playerController.gameObject) return;
         
-        Vector2 playerPosition = playerController.transform.position;
-        Vector2 itemPosition = transform.position;
-        float distance = Vector2.Distance(playerPosition, itemPosition);
+        // 이미 획득한 아이템이면 무시
+        if (isAcquired) return;
         
-        bool wasInRange = isPlayerInRange;
-        isPlayerInRange = distance <= itemData.interactionRange;
-        
-        // 범위 진입/이탈 시 로그 (디버그용)
-        if (wasInRange != isPlayerInRange)
+        // 거리 체크 (interactionRange 내에 있는지 확인)
+        if (itemData != null)
         {
-#if UNITY_EDITOR
-            if (isPlayerInRange)
-            {
-                Debug.Log($"[ItemBase] {itemData.itemName} - 플레이어가 상호작용 범위 내 진입 (거리: {distance:F2})");
-            }
-            else
-            {
-                Debug.Log($"[ItemBase] {itemData.itemName} - 플레이어가 상호작용 범위 밖으로 이탈 (거리: {distance:F2})");
-            }
-#endif
+            float distance = Vector2.Distance(transform.position, playerController.transform.position);
+            if (distance > itemData.interactionRange) return;
+        }
+        
+        // 범위 내 진입 처리
+        isPlayerInRange = true;
+        
+        // PlayerController에 등록
+        if (playerController != null)
+        {
+            playerController.RegisterNearbyItem(this);
+        }
+    }
+    
+    /// <summary>
+    /// 플레이어가 Trigger 범위 밖으로 나갔을 때 호출
+    /// </summary>
+    protected virtual void OnTriggerExit2D(Collider2D other)
+    {
+        // 플레이어인지 확인
+        if (playerController == null || other.gameObject != playerController.gameObject) return;
+        
+        // 범위 밖 이탈 처리
+        isPlayerInRange = false;
+        
+        // PlayerController에서 해제
+        if (playerController != null)
+        {
+            playerController.UnregisterNearbyItem(this);
         }
     }
     
@@ -153,64 +126,87 @@ public abstract class ItemBase : MonoBehaviour
     #region UI 표시/숨김
     
     /// <summary>
+    /// ItemInfoUI 찾기 (캐싱 사용)
+    /// </summary>
+    private ItemInfoUI FindItemInfoUI()
+    {
+        // 먼저 Inspector에서 할당된 UI 확인
+        if (itemInfoUI != null) return itemInfoUI;
+        
+        // 싱글톤 인스턴스 확인 (가장 빠름)
+        if (ItemInfoUI.Instance != null)
+        {
+            itemInfoUI = ItemInfoUI.Instance;
+            cachedItemInfoUI = itemInfoUI;
+            return itemInfoUI;
+        }
+        
+        // 캐시된 UI 확인
+        if (cachedItemInfoUI != null) return cachedItemInfoUI;
+        
+        // 자식 오브젝트에서 찾기 (비활성화된 오브젝트 포함)
+        itemInfoUI = GetComponentInChildren<ItemInfoUI>(true);
+        if (itemInfoUI != null)
+        {
+            cachedItemInfoUI = itemInfoUI;
+            return itemInfoUI;
+        }
+        
+        // 씬에서 찾기 (비활성화된 오브젝트 포함)
+        itemInfoUI = FindObjectOfType<ItemInfoUI>(true);
+        if (itemInfoUI != null)
+        {
+            cachedItemInfoUI = itemInfoUI;
+            return itemInfoUI;
+        }
+        
+        return null;
+    }
+    
+    /// <summary>
     /// 아이템 정보 UI 표시
+    /// 플레이어가 아이템 범위 내에 진입했을 때 호출됩니다.
+    /// 
+    /// UI에 표시할 정보:
+    /// - 아이템 이름: itemData.itemName
+    /// - 아이템 랭크: itemData.itemRank
+    /// - 아이템 설명: itemData.itemDescription
+    /// - 아이템 아이콘: itemData.itemIcon
+    /// - 획득 안내: "아이템 획득 (E)"
     /// </summary>
     protected virtual void ShowItemInfo()
     {
-        // TODO: UI 표시 로직 구현 (나중에 UI 시스템과 연동)
-        // 현재는 로그만 출력
+        // ItemInfoUI 찾기
+        ItemInfoUI ui = FindItemInfoUI();
+        
+        if (ui == null)
+        {
 #if UNITY_EDITOR
-        // Debug.Log($"[ItemBase] {itemData.itemName} UI 표시");
+            Debug.LogWarning($"[ItemBase] ItemInfoUI 컴포넌트를 찾을 수 없습니다. {itemData?.itemName ?? "Unknown"} 아이템의 UI가 표시되지 않습니다. 씬에 ItemInfoUI 컴포넌트가 있는 GameObject가 있는지 확인하세요.");
 #endif
+            return;
+        }
+        
+        // 아이템 데이터가 있으면 UI에 정보 표시
+        if (itemData != null)
+        {
+            ui.ShowItemInfo(itemData);
+        }
     }
     
     /// <summary>
     /// 아이템 정보 UI 숨김
+    /// 플레이어가 아이템 범위 밖으로 나갔을 때 호출됩니다.
     /// </summary>
     protected virtual void HideItemInfo()
     {
-        // TODO: UI 숨김 로직 구현 (나중에 UI 시스템과 연동)
-        // 현재는 로그만 출력
-#if UNITY_EDITOR
-        // Debug.Log($"[ItemBase] {itemData.itemName} UI 숨김");
-#endif
-    }
-    
-    #endregion
-    
-    #region 입력 처리
-    
-    /// <summary>
-    /// F키 입력 처리 (InputActionAsset 사용 시)
-    /// </summary>
-    protected virtual void OnInteractPerformed(InputAction.CallbackContext context)
-    {
-        // 이미 획득했거나 플레이어가 범위 내에 없으면 무시
-        if (isAcquired || !isPlayerInRange) return;
+        // ItemInfoUI 찾기
+        ItemInfoUI ui = FindItemInfoUI();
         
-        // 아이템 획득 처리
-        AcquireItem();
-    }
-    
-    /// <summary>
-    /// 직접 키 입력 감지 (InputActionAsset이 없을 때)
-    /// F키를 직접 감지합니다.
-    /// </summary>
-    protected virtual void CheckDirectKeyInput()
-    {
-#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-        // 새로운 Input System 사용
-        if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+        if (ui != null)
         {
-            AcquireItem();
+            ui.HideUI();
         }
-#else
-        // 레거시 Input System 사용
-        if (Input.GetKeyDown(KeyCode.F))
-        {
-            AcquireItem();
-        }
-#endif
     }
     
     #endregion
@@ -219,9 +215,10 @@ public abstract class ItemBase : MonoBehaviour
     
     /// <summary>
     /// 아이템 획득 처리
+    /// PlayerController에서 호출됩니다.
     /// 하위 클래스에서 오버라이드하여 개별 로직 구현
     /// </summary>
-    protected virtual void AcquireItem()
+    public virtual void AcquireItem()
     {
         if (isAcquired) return;
         
