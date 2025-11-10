@@ -97,9 +97,33 @@ namespace EDNE.UI
 
         #region Audio Settings
 
-        [Header("Audio Mixer")]
-        [Tooltip("AudioMixer를 연결하세요")]
+        [Header("Audio Mixer (Optional)")]
+        [Tooltip("AudioMixer를 사용하려면 연결하세요")]
         [SerializeField] private AudioMixer audioMixer;
+
+        /// <summary>
+        /// 마스터 볼륨 설정 (0~1)
+        /// </summary>
+        public void SetMasterVolume(float value)
+        {
+            value = Mathf.Clamp01(value);
+            
+            if (audioMixer != null)
+            {
+                // AudioMixer 사용 (-80dB ~ 0dB)
+                float volumeDB = value > 0 ? 20f * Mathf.Log10(value) : -80f;
+                audioMixer.SetFloat("MasterVolume", volumeDB);
+            }
+            else
+            {
+                // AudioListener 사용 (폴백)
+                AudioListener.volume = value;
+            }
+            
+            PlayerPrefs.SetFloat("MasterVolume", value);
+            PlayerPrefs.Save();
+            Debug.Log($"[UIManager] 마스터 볼륨 설정: {value:F2}");
+        }
 
         /// <summary>
         /// BGM 볼륨 설정 (0~1)
@@ -140,6 +164,11 @@ namespace EDNE.UI
         /// <summary>
         /// 저장된 볼륨 설정 불러오기
         /// </summary>
+        public float GetMasterVolume()
+        {
+            return PlayerPrefs.GetFloat("MasterVolume", 1f);
+        }
+
         public float GetBGMVolume()
         {
             return PlayerPrefs.GetFloat("BGMVolume", 1f);
@@ -183,13 +212,15 @@ namespace EDNE.UI
         /// </summary>
         private void LoadSavedAudioSettings()
         {
+            float masterVolume = GetMasterVolume();
             float bgmVolume = GetBGMVolume();
             float sfxVolume = GetSFXVolume();
 
+            SetMasterVolume(masterVolume);
             SetBGMVolume(bgmVolume);
             SetSFXVolume(sfxVolume);
 
-            Debug.Log($"[UIManager] 저장된 볼륨 적용 - BGM: {bgmVolume:F2}, SFX: {sfxVolume:F2}");
+            Debug.Log($"[UIManager] 저장된 볼륨 적용 - Master: {masterVolume:F2}, BGM: {bgmVolume:F2}, SFX: {sfxVolume:F2}");
         }
 
         #endregion
