@@ -92,17 +92,23 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	#region 재사용 메커니즘
 	
 	[Header("재사용 메커니즘")]
-	[Tooltip("기본 재사용 횟수 (랭크별)")]
+	[Tooltip("기본 재사용 횟수 (랭크별) - 무제한으로 사용 가능하므로 표시용")]
 	[SerializeField] private int[] baseRechargeCountByRank = new int[] { 1, 1, 2, 2, 3 };
 	
-	[Tooltip("표식 적 처치 시 추가 재사용 횟수")]
+	[Tooltip("표식 적에게 돌진 성공 시 추가 재사용 횟수")]
+	[SerializeField] private int bonusRechargeOnDash = 1;
+	
+	[Tooltip("표식 적에게 돌진 성공 시 추가 시간 (초)")]
+	[SerializeField] private float bonusTimeOnDash = 2f;
+	
+	[Tooltip("표식 적 처치 시 추가 재사용 횟수 (돌진 보너스에 추가)")]
 	[SerializeField] private int bonusRechargeOnKill = 1;
 	
-	[Tooltip("표식 적 처치 시 추가 시간 (초)")]
-	[SerializeField] private float bonusTimeOnKill = 3f;
+	[Tooltip("표식 적 처치 시 추가 시간 (초) (돌진 보너스에 추가)")]
+	[SerializeField] private float bonusTimeOnKill = 2f;
 	
-	[Tooltip("최대 재사용 횟수")]
-	[SerializeField] private int maxRechargeCount = 5;
+	[Tooltip("최대 재사용 횟수 (표시용)")]
+	[SerializeField] private int maxRechargeCount = 99;
 	
 	[Tooltip("스킬 지속 시간 (재사용 가능 시간)")]
 	[SerializeField] private float skillDuration = 10f;
@@ -628,9 +634,8 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			return;
 		}
 		
-		// 재사용 횟수 감소
-		currentRechargeCount--;
-		Debug.Log($"[FaithDashHandler] 재사용 횟수 감소: {currentRechargeCount}회 남음");
+		// ⭐ 재사용 횟수 감소하지 않음 (돌진 성공 시 자동 회복)
+		// currentRechargeCount--; // 제거됨
 		
 		// 돌진 목표 위치 계산 (타겟의 바로 뒤로)
 		Vector2 directionToTarget = (target.transform.position - playerController.transform.position).normalized;
@@ -642,8 +647,6 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			StopCoroutine(dashCoroutine);
 		}
 		dashCoroutine = StartCoroutine(DashCoroutine(dashTargetPos, rank, target));
-		
-		// 재사용 횟수가 0이 되면 돌진 후 재사용 모드 종료 (돌진 코루틴에서 처리)
 		
 		Debug.Log($"[FaithDashHandler] {target.name}에게 돌진!");
 	}
@@ -772,6 +775,9 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		// 이미 데미지를 입힌 적 추적
 		HashSet<EntityController> hitEnemies = new HashSet<EntityController>();
 		
+		// ⭐ 돌진 타겟 피격 여부 추적
+		bool dashTargetHit = false;
+		
 		// 돌진 궤적 이펙트 생성
 		GameObject trail = null;
 		if (dashTrailPrefab != null)
@@ -827,11 +833,17 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 				enemy.ApplyDamage((int)finalDamage, EntityType.Player);
 				hitEnemies.Add(enemy);
 				
+				// ⭐ 돌진 타겟 피격 시 플래그 설정
+				if (isDashTarget)
+				{
+					dashTargetHit = true;
+				}
+				
 				// 적이 죽었는지 확인
 				if (!enemy.IsAlive)
 				{
 					// 죽은 적은 OnEnemyKilled에서 보너스 처리 후 표식 자동 제거됨 (Update에서)
-					OnEnemyKilled(enemy);
+					OnEnemyKilled(enemy, hadMark);
 				}
 				else if (hadMark && markEffect != null && isDashTarget)
 				{
@@ -869,11 +881,11 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		// (애니메이션은 Animator Controller에서 Attack3 애니메이션이 끝나면 자동으로 Idle/Walk로 전환됩니다)
 		Debug.Log("[FaithDashHandler] 돌진 완료 (Attack3 애니메이션은 Animator에서 자동 전환)");
 		
-		// ⭐ 재사용 횟수가 0이 되면 재사용 모드 종료
-		if (currentRechargeCount <= 0)
+		// ⭐ 돌진 타겟 피격 시 보너스 지급
+		if (dashTargetHit)
 		{
-			Debug.Log("[FaithDashHandler] 재사용 횟수 소진! 재사용 모드 종료");
-			StopRechargeMode();
+			OnDashSuccess();
+			Debug.Log("[FaithDashHandler] ✨ 돌진 성공! 보너스 지급");
 		}
 		
 		dashCoroutine = null;
@@ -881,15 +893,31 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	
 	#endregion
 	
-	#region 적 처치 보상
+	#region 돌진 및 처치 보상
+	
+	/// <summary>
+	/// 돌진 성공 시 호출 (표식 적에게 피격 성공)
+	/// </summary>
+	private void OnDashSuccess()
+	{
+		// 재사용 횟수 추가
+		AddRechargeCount(bonusRechargeOnDash);
+		
+		// 시간 추가
+		AddRechargeTime(bonusTimeOnDash);
+		
+		Debug.Log($"[FaithDashHandler] 돌진 보너스: 재사용 +{bonusRechargeOnDash}회, 시간 +{bonusTimeOnDash}초");
+	}
 	
 	/// <summary>
 	/// 적 처치 시 호출
 	/// </summary>
-	private void OnEnemyKilled(EntityController enemy)
+	/// <param name="enemy">처치된 적</param>
+	/// <param name="hadMark">표식이 있었는지 여부</param>
+	private void OnEnemyKilled(EntityController enemy, bool hadMark)
 	{
-		// 표식이 있는 적을 처치한 경우
-		if (HasMark(enemy))
+		// 표식이 있는 적을 처치한 경우 추가 보너스
+		if (hadMark)
 		{
 			// 재사용 횟수 추가
 			AddRechargeCount(bonusRechargeOnKill);
@@ -902,12 +930,15 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 			{
 				Instantiate(markKillEffectPrefab, enemy.transform.position, Quaternion.identity);
 			}
+			
+			Debug.Log($"[FaithDashHandler] 처치 추가 보너스: 재사용 +{bonusRechargeOnKill}회, 시간 +{bonusTimeOnKill}초");
 		}
 		
 		// S랭크 모드면 무조건 시간 추가
 		if (isInSRankMode)
 		{
 			AddRechargeTime(sRankTimeOnKill);
+			Debug.Log($"[FaithDashHandler] S랭크 처치 보너스: 시간 +{sRankTimeOnKill}초");
 		}
 	}
 	
