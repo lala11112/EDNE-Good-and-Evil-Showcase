@@ -23,6 +23,17 @@ public class Shockwave : MonoBehaviour
     
     [Tooltip("발동 지속 시간 (초)")]
     [SerializeField] private float activeDuration = 0.3f;
+
+	[Header("발동 단계 VFX (콜라이더에 정합)")]
+	[Tooltip("발동 단계에서 스프라이트 대신 표시할 VFX 프리팹")]
+	[SerializeField] private GameObject activeVFXPrefab;
+	[Tooltip("발동 단계에서 VFX를 사용할지 여부")]
+	[SerializeField] private bool useActiveVFX = false;
+	[Tooltip("프리팹의 기준 길이/두께 (Scale=1일 때 로컬 크기). 콜라이더 로컬 size를 이 값으로 나눠 최종 로컬 스케일을 계산합니다")]
+	[SerializeField] private Vector2 vfxUnitLocalSize = new Vector2(1f, 1f);
+	[Tooltip("VFX 사용 시 스프라이트를 숨김")]
+	[SerializeField] private bool hideSpriteDuringActiveWhenUsingVFX = true;
+
     
     private SpriteRenderer spriteRenderer;
     private BoxCollider2D boxCollider;
@@ -30,6 +41,12 @@ public class Shockwave : MonoBehaviour
     private float damage;
     private EntityType attackerType;
     private bool isActive = false; // 발동 상태 (데미지 적용 가능 여부)
+
+    // VFX 정렬/스케일을 위해 시전자→타겟 엔드포인트를 기억
+    private bool hasEndpoints = false;
+    private Vector3 sourceWorldPos;
+    private Vector3 targetWorldPos;
+    private float cachedThickness = 1f; // localScale.y에 해당하는 두께
     
     private HashSet<EntityController> hitEntities = new HashSet<EntityController>(); // 이미 맞은 대상 (중복 방지)
     
@@ -87,10 +104,41 @@ public class Shockwave : MonoBehaviour
         
         // 크기 설정
         transform.localScale = new Vector3(size.x, size.y, 1f);
+        cachedThickness = size.y;
         
         Debug.Log($"[Shockwave] 초기화 - 데미지: {damage}, 크기: {size}");
         
         // 시퀀스 시작
+        StartCoroutine(ExecuteSequence());
+    }
+
+    /// <summary>
+    /// 엔드포인트 기반 초기화: 시전자→타겟 방향과 길이에 맞춰 자동 정렬/스케일
+    /// </summary>
+    public void InitializeWithEndpoints(float damage, EntityType attackerType, Vector3 source, Vector3 target, float thickness)
+    {
+        this.damage = damage;
+        this.attackerType = attackerType;
+        this.sourceWorldPos = source;
+        this.targetWorldPos = target;
+        this.hasEndpoints = true;
+        this.cachedThickness = Mathf.Max(0.01f, thickness);
+
+        Vector3 dir = (target - source);
+        float length = dir.magnitude;
+        if (length < 0.001f) { dir = transform.right; length = 0.01f; } else { dir /= length; }
+
+        // 회전: 로컬 +X(transform.right)가 dir과 일치하도록
+        Quaternion rot = Quaternion.FromToRotation(Vector3.right, new Vector3(dir.x, dir.y, 0f));
+        transform.rotation = rot;
+        // 위치: 중간 지점
+        Vector3 mid = source + dir * (length * 0.5f);
+        transform.position = mid;
+        // 스케일: X=길이, Y=두께
+        transform.localScale = new Vector3(length, cachedThickness, 1f);
+
+        Debug.Log($"[Shockwave] InitializeWithEndpoints - len={length:F2} thick={cachedThickness:F2} src={source} dst={target}");
+
         StartCoroutine(ExecuteSequence());
     }
     
@@ -137,9 +185,72 @@ public class Shockwave : MonoBehaviour
     {
         Debug.Log($"[Shockwave] 발동! (색상: {activeColor})");
         
+		GameObject vfxInstance = null;
+		GameObject vfxPivot = null;
         // 발동 상태로 전환
         isActive = true;
-        spriteRenderer.color = activeColor;
+
+		if (useActiveVFX && activeVFXPrefab != null && boxCollider != null)
+		{
+			// 스프라이트 표시 여부
+			if (hideSpriteDuringActiveWhenUsingVFX)
+			{
+				spriteRenderer.color = new Color(1f, 1f, 1f, 0f);
+			}
+			else
+			{
+				spriteRenderer.color = activeColor;
+			}
+
+			// Pivot 생성: 애니메이션이 자식 트랜스폼 회전을 덮어써도, 피벗 회전/스케일로 방향/크기를 유지
+			vfxPivot = new GameObject("ShockwaveVFXPivot");
+			vfxPivot.transform.SetParent(transform, false);
+			vfxPivot.transform.localPosition = (Vector3)boxCollider.offset;
+			vfxPivot.transform.localRotation = Quaternion.identity;
+
+			// 스케일: 피벗에 적용 (자식 애니메이션 스케일과 분리)
+			Vector2 colLocalSize = boxCollider.size;
+			float unitX = Mathf.Max(0.001f, vfxUnitLocalSize.x);
+			float unitY = Mathf.Max(0.001f, vfxUnitLocalSize.y);
+			vfxPivot.transform.localScale = new Vector3(colLocalSize.x / unitX, colLocalSize.y / unitY, 1f);
+
+			// 프리팹 인스턴스: 피벗의 자식으로 배치, 로컬 정렬
+			vfxInstance = Instantiate(activeVFXPrefab, vfxPivot.transform);
+			vfxInstance.transform.localPosition = Vector3.zero;
+			vfxInstance.transform.localRotation = Quaternion.identity;
+			vfxInstance.transform.localScale = Vector3.one;
+
+			// 자식 파티클/스프라이트에 색 적용(선택)
+			var pss = vfxInstance.GetComponentsInChildren<ParticleSystem>(true);
+			for (int i = 0; i < pss.Length; i++)
+			{
+				var ps = pss[i];
+				var main = ps.main;
+				main.startColor = new ParticleSystem.MinMaxGradient(activeColor);
+				main.simulationSpace = ParticleSystemSimulationSpace.Local;
+				main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+				var vel = ps.velocityOverLifetime;
+				vel.space = ParticleSystemSimulationSpace.Local;
+				ps.Play(true);
+			}
+			// 렌더러 정렬을 로컬 기준으로 통일
+			var psrs = vfxInstance.GetComponentsInChildren<ParticleSystemRenderer>(true);
+			for (int i = 0; i < psrs.Length; i++)
+			{
+				try { psrs[i].alignment = ParticleSystemRenderSpace.Local; } catch { /* older Unity versions */ }
+			}
+			var childSRs = vfxInstance.GetComponentsInChildren<SpriteRenderer>(true);
+			for (int i = 0; i < childSRs.Length; i++)
+			{
+				childSRs[i].color = activeColor;
+			}
+		}
+		else
+		{
+			// 기존 방식: 스프라이트 빨간 불투명
+			spriteRenderer.color = activeColor;
+		}
+
         boxCollider.enabled = true; // 충돌 활성화
         
         Debug.Log($"[Shockwave] 현재 SpriteRenderer 색상: {spriteRenderer.color}");
@@ -150,6 +261,10 @@ public class Shockwave : MonoBehaviour
         // 종료
         isActive = false;
         boxCollider.enabled = false;
+		if (vfxPivot != null)
+		{
+			Destroy(vfxPivot);
+		}
         
         Debug.Log("[Shockwave] 발동 종료");
     }

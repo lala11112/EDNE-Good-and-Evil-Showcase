@@ -124,7 +124,6 @@ public partial class BossController : EntityController
 		if (!isAlive) return;
 		if (isSkillActive) return;
 		if (Time.time < nextAnySkillAllowedAt) return;
-		if (skillSlots == null || skillSlots.Length == 0) return;
 
         // 페이즈 반복이 진행 중이면 우선 처리
         if (currentRepeatingPhaseIndex != -1 && phaseRepeatRemaining != null && currentRepeatingPhaseIndex < phaseRepeatRemaining.Length)
@@ -192,38 +191,42 @@ public partial class BossController : EntityController
 			}
 		}
 
-		// 쿨타임 업데이트
-		for (int i = 0; i < slotCooldownTimers.Length; i++)
+		// 슬롯 스킬이 있는 경우에만 슬롯 로직 진행
+		if (skillSlots != null && skillSlots.Length > 0)
 		{
-			slotCooldownTimers[i] -= Time.deltaTime;
-		}
-
-		// 순차 사용: 다음 슬롯 확인
-		int tries = skillSlots.Length;
-		while (tries-- > 0)
-		{
-			int index = nextSlotIndex;
-			var slot = skillSlots[index];
-            if (slot.skill != null && slotCooldownTimers[index] <= 0f && IsInRange(slot))
+			// 쿨타임 업데이트
+			for (int i = 0; i < slotCooldownTimers.Length; i++)
 			{
-				// 반복 남은 횟수가 없으면 [min,max]에서 랜덤으로 셋업
-				int minUses = Mathf.Max(1, slot.minRepeatUses);
-				int maxUses = Mathf.Max(minUses, slot.maxRepeatUses);
-				if (slotRepeatRemaining[index] <= 0)
-				{
-					slotRepeatRemaining[index] = Random.Range(minUses, maxUses + 1); // inclusive
-					if (debugSkillLogs)
-					{
-						string n = slot.skill != null ? (!string.IsNullOrEmpty(slot.skill.skillName) ? slot.skill.skillName : slot.skill.name) : "<null>";
-						Debug.Log($"[BossController] Slot {index} roll repeats={slotRepeatRemaining[index]} for {n}");
-					}
-				}
-
-				UseSlotSkill(index, slot);
-				return;
+				slotCooldownTimers[i] -= Time.deltaTime;
 			}
 
-			nextSlotIndex = (nextSlotIndex + 1) % skillSlots.Length;
+			// 순차 사용: 다음 슬롯 확인
+			int tries = skillSlots.Length;
+			while (tries-- > 0)
+			{
+				int index = nextSlotIndex;
+				var slot = skillSlots[index];
+				if (slot.skill != null && slotCooldownTimers[index] <= 0f && IsInRange(slot))
+				{
+					// 반복 남은 횟수가 없으면 [min,max]에서 랜덤으로 셋업
+					int minUses = Mathf.Max(1, slot.minRepeatUses);
+					int maxUses = Mathf.Max(minUses, slot.maxRepeatUses);
+					if (slotRepeatRemaining[index] <= 0)
+					{
+						slotRepeatRemaining[index] = Random.Range(minUses, maxUses + 1); // inclusive
+						if (debugSkillLogs)
+						{
+							string n = slot.skill != null ? (!string.IsNullOrEmpty(slot.skill.skillName) ? slot.skill.skillName : slot.skill.name) : "<null>";
+							Debug.Log($"[BossController] Slot {index} roll repeats={slotRepeatRemaining[index]} for {n}");
+						}
+					}
+
+					UseSlotSkill(index, slot);
+					return;
+				}
+
+				nextSlotIndex = (nextSlotIndex + 1) % skillSlots.Length;
+			}
 		}
 	}
 	#endregion

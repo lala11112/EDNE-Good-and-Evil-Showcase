@@ -100,15 +100,13 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
         // 한 프레임 대기 (NavMeshAgent가 완전히 멈출 시간 제공)
         yield return null;
         
-        // 1. 충격파 생성 위치 계산 (타겟 방향 앞)
+        // 1. 충격파 생성 위치/회전 계산 (항상 동일 스케일, 일정 거리 앞에 스폰)
         Vector3 directionToTarget = (target.position - ownerController.transform.position).normalized;
         Vector3 spawnPosition = ownerController.transform.position + directionToTarget * spawnDistance;
-        
-        // 2. 회전 각도 계산 (타겟 방향을 향하도록)
         float angle = Mathf.Atan2(directionToTarget.y, directionToTarget.x) * Mathf.Rad2Deg;
         Quaternion rotation = Quaternion.Euler(0, 0, angle);
-        
-        // 3. 충격파 생성
+
+        // 2. 충격파 생성
         GameObject shockwavePrefabToUse = shockwavePrefab != null ? shockwavePrefab : skillData.skillEffectPrefab;
         
         if (shockwavePrefabToUse == null)
@@ -119,8 +117,8 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
         }
         
         GameObject shockwaveObj = Instantiate(shockwavePrefabToUse, spawnPosition, rotation);
-        
-        // 4. 충격파 컴포넌트 설정
+
+        // 3. 충격파 컴포넌트 설정 (항상 동일 스케일 적용)
         Shockwave shockwave = shockwaveObj.GetComponent<Shockwave>();
         if (shockwave != null)
         {
