@@ -21,6 +21,9 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("플레이어 컨트롤러")]
 	private PlayerController playerController;
 	
+	[Tooltip("스킬 슬롯 (SkillSlotType 가져오기용)")]
+	private SkillSlot skillSlot;
+	
 	#endregion
 	
 	#region 범위 설정
@@ -147,7 +150,22 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 			Debug.LogError("[IronBladeDanceHandler] PlayerController를 찾을 수 없습니다!");
 		}
 		
+		// SkillSlot 찾기 (SkillSlotType 가져오기용)
+		skillSlot = GetComponentInParent<SkillSlot>();
+		if (skillSlot == null)
+		{
+			Debug.LogWarning("[IronBladeDanceHandler] SkillSlot을 찾을 수 없습니다.");
+		}
+		
 		Debug.Log("[IronBladeDanceHandler] Setup 완료");
+	}
+	
+	/// <summary>
+	/// 스킬 슬롯 타입 가져오기 (용기 시스템용)
+	/// </summary>
+	public SkillSlotType? GetSkillSlotType()
+	{
+		return skillSlot != null ? skillSlot.SlotType : null;
 	}
 	
 	/// <summary>

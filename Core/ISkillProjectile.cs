@@ -37,5 +37,11 @@ public interface ISkillProjectile
     /// </summary>
     /// <param name="isPiercing">true = 관통형 (충돌해도 파괴 안됨), false = 충돌 시 파괴</param>
     void SetPiercing(bool isPiercing);
+    
+    /// <summary>
+    /// 스킬 슬롯 타입 가져오기 (용기 시스템용)
+    /// </summary>
+    /// <returns>스킬 슬롯 타입 (없으면 null)</returns>
+    SkillSlotType? GetSkillSlotType();
 }
 

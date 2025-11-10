@@ -245,10 +245,18 @@ public partial class MonsterController : EntityController
     #region EntityController Overrides - 부모 오버라이드
     
     /// <summary>
+    /// 마지막 데미지 소스 (Die에서 사용)
+    /// </summary>
+    private object lastDamageSource = null;
+    
+    /// <summary>
     /// 데미지를 받았을 때 (EntityController 오버라이드)
     /// </summary>
     protected override void OnDamaged(int damageAmount, object damageSource)
     {
+        // 마지막 데미지 소스 저장 (Die에서 사용)
+        lastDamageSource = damageSource;
+        
         base.OnDamaged(damageAmount, damageSource);
         
         // 피격 애니메이션
@@ -317,6 +325,27 @@ public partial class MonsterController : EntityController
     protected override void Die()
     {
         Debug.Log("다이");
+        
+        // ⭐ 스킬로 처치된 경우 이벤트 발생 (용기 시스템용)
+        // 데미지 소스에서 스킬 정보 추출
+        SkillSlotType? skillSlotType = null;
+        DamageSourceType sourceType = DamageSourceType.Projectile; // 기본값
+        
+        // 마지막 데미지 소스 확인
+        if (lastDamageSource != null)
+        {
+            // DamageSourceInfo를 통해 스킬 정보 추출
+            DamageSourceInfo damageInfo = DamageSourceInfo.FromDamageSource(lastDamageSource);
+            skillSlotType = damageInfo.skillSlotType;
+            sourceType = damageInfo.sourceType;
+            
+            // 스킬로 처치된 경우에만 이벤트 발생 (skillSlotType이 null이 아니면 스킬로 처치된 것)
+            if (skillSlotType.HasValue)
+            {
+                OnKilledBySkill(skillSlotType.Value, sourceType);
+            }
+        }
+        
         base.Die();
         
         // NavMesh 이동 정지
@@ -400,6 +429,20 @@ public partial class MonsterController : EntityController
 
     // 이벤트
     public System.Action<MonsterController> OnMonsterDied;
+    
+    /// <summary>
+    /// 몬스터가 스킬로 처치되었을 때 발생하는 이벤트
+    /// </summary>
+    public event System.Action<MonsterController, SkillSlotType?, DamageSourceType> OnMonsterKilledBySkill;
+    
+    /// <summary>
+    /// 몬스터 사망 처리 (스킬로 처치된 경우)
+    /// </summary>
+    private void OnKilledBySkill(SkillSlotType? skillSlotType, DamageSourceType sourceType)
+    {
+        // 이벤트 발생
+        OnMonsterKilledBySkill?.Invoke(this, skillSlotType, sourceType);
+    }
     
     #endregion
     

@@ -44,28 +44,151 @@ public class PlayerDataSO : EntityDataSO
     
     [Header("=== 용기 시스템 (Courage System) ===")]
     [Tooltip("초기 용기 점수 (게임 시작 시)")]
-    public int initialCourageScore = 200;
-    
+    public int initialCourageScore = 0;
     
     [Space(10)]
-    [Header("용기 단계별 요구 점수")]
-    [Tooltip("절망 (Despair) - 게임오버 상태")]
-    public int despairStepRequirement = 0;
+    [Header("용기 시스템 - 단계 요구 점수 (누적 용기 점수)")]
+    [Tooltip("불안 (Anxiety) - 스킬 랭크 D (누적 0)")]
+    public int anxietyStepRequirement = 0;
     
-    [Tooltip("불안 (Anxiety) - 스킬 랭크 D")]
-    public int anxietyStepRequirement = 1;
+    [Tooltip("의심 (Doubt) - 스킬 랭크 C (누적 100)")]
+    public int doubtStepRequirement = 100;
     
-    [Tooltip("의심 (Doubt) - 스킬 랭크 C (기본 시작 단계)")]
-    public int doubtStepRequirement = 200;
+    [Tooltip("용기 (Courage) - 스킬 랭크 B (누적 250)")]
+    public int courageStepRequirement = 250;
     
-    [Tooltip("용기 (Courage) - 스킬 랭크 B")]
-    public int courageStepRequirement = 300;
+    [Tooltip("결의 (Determination) - 스킬 랭크 A (누적 450)")]
+    public int determinationStepRequirement = 450;
     
-    [Tooltip("결의 (Determination) - 스킬 랭크 A")]
-    public int determinationStepRequirement = 400;
+    [Tooltip("확신 (Confidence) - 스킬 랭크 S (누적 700)")]
+    public int confidenceStepRequirement = 700;
     
-    [Tooltip("확신 (Confidence) - 스킬 랭크 S")]
-    public int confidenceStepRequirement = 500;
+    [Space(10)]
+    [Header("용기 획득 - 기본 전투 행동")]
+    [Tooltip("기본 처치 용기")]
+    public int killCourageGain = 15;
+    
+    [Tooltip("같은 스킬 연속 사용 페널티")]
+    public int sameSkillKillCourageGain = 10;
+    
+    [Space(10)]
+    [Header("용기 획득 - 멀티킬 보너스")]
+    [Tooltip("2킬 보너스")]
+    public int multiKill2Bonus = 20;
+    
+    [Tooltip("3킬 보너스")]
+    public int multiKill3Bonus = 30;
+    
+    [Tooltip("4킬 보너스")]
+    public int multiKill4Bonus = 40;
+    
+    [Tooltip("5킬 이상 보너스")]
+    public int multiKill5Bonus = 50;
+    
+    [Space(10)]
+    [Header("용기 획득 - 스킬 연계 보너스")]
+    [Tooltip("2종 콤보 보너스")]
+    public int combo2Bonus = 20;
+    
+    [Tooltip("3종 콤보 보너스")]
+    public int combo3Bonus = 30;
+    
+    [Tooltip("4종 콤보 보너스 (풀 체인)")]
+    public int combo4Bonus = 50;
+    
+    [Space(10)]
+    [Header("용기 획득 - 무피해 보너스")]
+    [Tooltip("10초 무피해 판정 시간")]
+    public float noDamageJudgmentDuration_10 = 10f;
+    
+    [Tooltip("10초 무피해 보너스/초")]
+    public float noDamageCourageGainPerSecond_10 = 5f;
+    
+    [Tooltip("20초 무피해 판정 시간")]
+    public float noDamageJudgmentDuration_20 = 20f;
+    
+    [Tooltip("20초 무피해 보너스/초")]
+    public float noDamageCourageGainPerSecond_20 = 10f;
+    
+    [Space(10)]
+    [Header("용기 획득 - 완벽 회피")]
+    [Tooltip("완벽 회피 용기 획득량")]
+    public int perfectDodgeCourageGain = 25;
+    
+    [Tooltip("완벽 회피 판정 범위 (회피 범위 진입 감지 거리)")]
+    public float perfectDodgeRange = 1.5f;
+    
+    [Tooltip("완벽 회피 안전 거리 (이 거리 이상 멀어지면 회피 판정)")]
+    public float perfectDodgeSafeDistance = 2.0f;
+    
+    [Space(10)]
+    [Header("용기 감소 - 피격")]
+    [Tooltip("탄막 피격 용기 감소량")]
+    public int projectileHitCourageLoss = 40;
+    
+    [Tooltip("접촉 피격 용기 감소량")]
+    public int contactHitCourageLoss = 30;
+    
+    [Tooltip("환경 피격 용기 감소량")]
+    public int environmentHitCourageLoss = 30;
+    
+    [Space(10)]
+    [Header("용기 감소 - 연속 피격 보호")]
+    [Tooltip("2번 연속 피격 용기 감소량")]
+    public int consecutiveHit2CourageLoss = 30;
+    
+    [Tooltip("3번 이상 연속 피격 용기 감소량")]
+    public int consecutiveHit3PlusCourageLoss = 20;
+    
+    [Space(10)]
+    [Header("용기 감소 - 전투 없음 페널티")]
+    [Tooltip("5초간 전투 없음 판정")]
+    public float noCombatJudgmentDuration = 5f;
+    
+    [Tooltip("전투 없음 페널티/초")]
+    public float noCombatCourageLossPerSecond = 10f;
+    
+    [Space(10)]
+    [Header("용기 시스템 - 기록 유지 시간")]
+    [Tooltip("처치 기록 유지 시간")]
+    public float killRecordDuration = 15f;
+    
+    [Tooltip("스킬 사용 기록 유지 시간 (연계 판정용)")]
+    public float skillUseRecordDuration = 5f;
+    
+    [Tooltip("멀티킬 판정 시간")]
+    public float multiKillJudgmentDuration = 3f;
+    
+    [Tooltip("연속 피격 판정 시간")]
+    public float consecutiveHitJudgmentDuration = 10f;
+    
+    [Space(10)]
+    [Header("전투 시스템")]
+    [Tooltip("초기 전투 시간")]
+    public float initialCombatDuration = 15f;
+    
+    [Tooltip("전투 행동 시 연장 시간")]
+    public float combatExtensionDuration = 15f;
+    
+    [Tooltip("전투 종료 후 재개 가능 시간")]
+    public float combatEndJudgmentDuration = 15f;
+    
+    [Space(10)]
+    [Header("S랭크 궁극기 버프 (용기의 여운)")]
+    [Tooltip("버프 지속 시간 (초)")]
+    public float ultimateBuffDuration = 15f;
+    
+    [Tooltip("용기 획득량 배율 (1.5 = 1.5배 증가)")]
+    [Range(1f, 3f)]
+    public float ultimateBuffCourageGainMultiplier = 1.5f;
+    
+    [Tooltip("정신력 회복 속도 배율 (2.0 = 2배 증가)")]
+    [Range(1f, 5f)]
+    public float ultimateBuffMentalPowerRegenMultiplier = 2f;
+    
+    [Tooltip("이동 속도 배율 (1.2 = 1.2배 증가)")]
+    [Range(1f, 2f)]
+    public float ultimateBuffMoveSpeedMultiplier = 1.2f;
     
     #endregion
     

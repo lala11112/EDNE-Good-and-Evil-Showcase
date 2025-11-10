@@ -20,14 +20,50 @@ public enum StatusEffectType
 
 
 
+/// <summary>
+/// 용기 상태 (Courage State)
+/// </summary>
 public enum CourageState
 {
-    Despair, anxiety, doubt, courage, determination, confidence
+    Despair,      // 절망 (0 이하)
+    Anxiety,      // 불안
+    Doubt,        // 의심
+    Courage,      // 용기
+    Determination,// 결의
+    Confidence    // 자신감
 }
 
-public enum PlayerSkillRank
+/// <summary>
+/// 스킬 랭크 (Skill Rank)
+/// </summary>
+public enum SkillRank
 {
-    D, C, B, A, S
+    D,  // 최하 랭크
+    C,
+    B,
+    A,
+    S   // 최상 랭크
+}
+
+/// <summary>
+/// 스킬 슬롯 타입 (Skill Slot Type)
+/// </summary>
+public enum SkillSlotType
+{
+    Z,  // 스킬 Z (Skill1)
+    X,  // 스킬 X (Skill2)
+    C,  // 스킬 C (Skill3)
+    V   // 스킬 V (Skill4, 궁극기)
+}
+
+/// <summary>
+/// 데미지 소스 타입 (Damage Source Type)
+/// </summary>
+public enum DamageSourceType
+{
+    Projectile,   // 탄막
+    Contact,      // 접촉
+    Environment   // 환경
 }
 
 

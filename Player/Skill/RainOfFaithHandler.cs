@@ -484,7 +484,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			Sprite playerSprite = (playerSpriteRenderer != null) ? playerSpriteRenderer.sprite : null;
 			
 			// 초기화 (비활성 상태로)
-			afterimage.SetupAsInactive(finalDamage, isInSRankMode, playerSprite);
+			// ⭐ 스킬 슬롯 타입 전달 (용기 시스템용)
+			SkillSlotType? slotType = skillSlot != null ? skillSlot.SlotType : null;
+			afterimage.SetupAsInactive(finalDamage, isInSRankMode, playerSprite, slotType);
 			
 			installedAfterimages.Add(afterimageObj);
 			

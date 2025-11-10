@@ -36,6 +36,14 @@ public class PlayerStatusUI : MonoBehaviour
 	
 	#endregion
 	
+	#region UI 컴포넌트 - 용기 시스템
+	
+	[Header("용기 시스템 UI")]
+	[Tooltip("랭크 및 용기 점수 표시 텍스트 (Rank : (현재랭크) 용기점수 Score : (용기점수))")]
+	[SerializeField] private TextMeshProUGUI courageStatusText;
+	
+	#endregion
+	
 	#region 색상 설정
 	
 	[Header("체력바 색상")]
@@ -130,6 +138,9 @@ public class PlayerStatusUI : MonoBehaviour
 		
 		// 텍스트 깜빡임 효과
 		UpdateTextBlink(Time.deltaTime);
+		
+		// 용기 시스템 UI 업데이트
+		UpdateCourageStatus();
 	}
 	
 	#endregion
@@ -209,6 +220,9 @@ public class PlayerStatusUI : MonoBehaviour
 			
 			// 정신력 갱신
 			OnMentalPowerChanged(PlayerController.Instance.CurrentMentalPower, PlayerController.Instance.MaxMentalPower);
+			
+			// 용기 시스템 갱신
+			UpdateCourageStatus();
 		}
 	}
 	
@@ -416,6 +430,32 @@ public class PlayerStatusUI : MonoBehaviour
 		}
 		
 		mentalPowerFillImage.color = targetColor;
+	}
+	
+	#endregion
+	
+	#region 용기 시스템 UI
+	
+	/// <summary>
+	/// 용기 시스템 상태 업데이트 (랭크 및 용기 점수)
+	/// </summary>
+	private void UpdateCourageStatus()
+	{
+		if (courageStatusText == null) return;
+		
+		if (PlayerController.Instance != null)
+		{
+			SkillRank currentRank = PlayerController.Instance.CurrentSkillRank;
+			int courageScore = PlayerController.Instance.CourageScore;
+			
+			// 텍스트 업데이트: "Rank : (현재랭크) 용기점수 Score : (용기점수)"
+			courageStatusText.text = $"Skill Rank : {currentRank}    brave Score : {courageScore}";
+		}
+		else
+		{
+			// PlayerController가 없으면 기본값 표시
+			courageStatusText.text = "Rank : - 용기점수 Score : -";
+		}
 	}
 	
 	#endregion
