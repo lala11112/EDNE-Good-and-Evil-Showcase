@@ -90,3 +90,12 @@ public enum MoveDirection
     DownLeft,   // 왼쪽 아래 (대각선)
     DownRight   // 오른쪽 아래 (대각선)
 }
+
+/// <summary>
+/// 아이템 타입 (Item Type)
+/// </summary>
+public enum ItemType
+{
+    Consumable, // 소비 아이템 (즉시 효과 적용, 인벤토리 등록 안 함)
+    Equipment   // 장비 아이템 (지속 효과 적용, 인벤토리에 등록)
+}

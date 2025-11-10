@@ -26,6 +26,10 @@ public class RoomController : MonoBehaviour
     [Tooltip("방의 트랩들")]
     [SerializeField] private List<TrapBase> connectedTraps = new List<TrapBase>();
 
+    [Header("아이템")]
+    [Tooltip("현재 방에 스폰된 아이템들")]
+    [SerializeField] private List<ItemBase> currentItems = new List<ItemBase>();
+
     [Header("현재 상태")]
     [Tooltip("현재 웨이브 번호")]
     [SerializeField] private int currentWave = 0;
@@ -454,6 +458,9 @@ public class RoomController : MonoBehaviour
         // 보상 지급
         GiveRewards();
 
+        // 아이템 스폰
+        SpawnItems();
+
         OnRoomCleared?.Invoke(this);
         Debug.Log($"[RoomController] {roomData.roomName} 클리어!");
     }
@@ -568,6 +575,111 @@ public class RoomController : MonoBehaviour
         {
             // TODO: 보상 시스템 구현
             Debug.Log($"[RoomController] 보상 지급: {reward.rewardType} x{reward.rewardAmount}");
+        }
+    }
+
+    /// <summary>
+    /// 아이템 스폰
+    /// 방 클리어 시 지정된 위치에 아이템을 스폰합니다.
+    /// </summary>
+    private void SpawnItems()
+    {
+        if (roomData == null || roomData.itemSpawnDataList == null || roomData.itemSpawnDataList.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var itemSpawnData in roomData.itemSpawnDataList)
+        {
+            if (itemSpawnData.itemPrefab == null)
+            {
+                Debug.LogWarning($"[RoomController] 아이템 프리팹이 null입니다. 스킵합니다.");
+                continue;
+            }
+
+            // 스폰 위치 계산
+            Vector3 spawnPosition;
+            if (itemSpawnData.spawnPosition != null)
+            {
+                // 지정된 위치 사용
+                spawnPosition = itemSpawnData.spawnPosition.position + (Vector3)itemSpawnData.spawnOffset;
+            }
+            else
+            {
+                // 랜덤 위치 (방 콜라이더 내부)
+                // TODO: 방 콜라이더 내부 랜덤 위치 계산 (필요 시 구현)
+                spawnPosition = transform.position + (Vector3)itemSpawnData.spawnOffset;
+                Debug.LogWarning($"[RoomController] 아이템 스폰 위치가 지정되지 않아 방 중심에 스폰합니다.");
+            }
+
+            // 아이템 스폰
+            GameObject itemObject = Instantiate(itemSpawnData.itemPrefab, spawnPosition, Quaternion.identity);
+            ItemBase item = itemObject.GetComponent<ItemBase>();
+            
+            if (item == null)
+            {
+                Debug.LogError($"[RoomController] 아이템 프리팹에 ItemBase 컴포넌트가 없습니다! {itemSpawnData.itemPrefab.name}");
+                Destroy(itemObject);
+                continue;
+            }
+
+            // 아이템 등록
+            RegisterItem(item);
+
+            // 스폰 이펙트 재생
+            if (itemSpawnData.spawnEffect != null)
+            {
+                GameObject effect = Instantiate(itemSpawnData.spawnEffect, spawnPosition, Quaternion.identity);
+                
+                // 이펙트 자동 삭제
+                ParticleSystem particles = effect.GetComponent<ParticleSystem>();
+                if (particles != null)
+                {
+                    Destroy(effect, particles.main.duration + particles.main.startLifetime.constantMax);
+                }
+                else
+                {
+                    Destroy(effect, 2f);
+                }
+            }
+
+            Debug.Log($"[RoomController] 아이템 스폰: {item.ItemData?.itemName ?? "Unknown"} at {spawnPosition}");
+        }
+    }
+
+    /// <summary>
+    /// 아이템 등록
+    /// </summary>
+    public void RegisterItem(ItemBase item)
+    {
+        if (item == null)
+        {
+            Debug.LogError($"[RoomController] null 아이템을 등록하려고 시도했습니다.");
+            return;
+        }
+
+        if (!currentItems.Contains(item))
+        {
+            currentItems.Add(item);
+            Debug.Log($"[RoomController] 아이템 등록: {item.ItemData?.itemName ?? "Unknown"} (총 {currentItems.Count}개)");
+        }
+        else
+        {
+            Debug.LogWarning($"[RoomController] 아이템 {item.ItemData?.itemName ?? "Unknown"}이 이미 등록되어 있습니다.");
+        }
+    }
+
+    /// <summary>
+    /// 아이템 제거
+    /// </summary>
+    public void UnregisterItem(ItemBase item)
+    {
+        if (item == null) return;
+
+        if (currentItems.Contains(item))
+        {
+            currentItems.Remove(item);
+            Debug.Log($"[RoomController] 아이템 제거: {item.ItemData?.itemName ?? "Unknown"} (남은 {currentItems.Count}개)");
         }
     }
 
