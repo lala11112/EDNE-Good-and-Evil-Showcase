@@ -115,11 +115,11 @@ public class PlayerDataSO : EntityDataSO
     [Tooltip("완벽 회피 용기 획득량")]
     public int perfectDodgeCourageGain = 25;
     
-    [Tooltip("완벽 회피 판정 거리 (기본 거리)")]
-    public float perfectDodgeDistance = 0.5f;
+    [Tooltip("완벽 회피 판정 범위 (회피 범위 진입 감지 거리)")]
+    public float perfectDodgeRange = 1.5f;
     
-    [Tooltip("완벽 회피 판정 시간 (초) - 이 시간 동안 이동할 수 있는 거리만큼 추가 판정")]
-    public float perfectDodgeJudgmentTime = 0.3f;
+    [Tooltip("완벽 회피 안전 거리 (이 거리 이상 멀어지면 회피 판정)")]
+    public float perfectDodgeSafeDistance = 2.0f;
     
     [Space(10)]
     [Header("용기 감소 - 피격")]

@@ -449,7 +449,7 @@ public class PlayerStatusUI : MonoBehaviour
 			int courageScore = PlayerController.Instance.CourageScore;
 			
 			// 텍스트 업데이트: "Rank : (현재랭크) 용기점수 Score : (용기점수)"
-			courageStatusText.text = $"Rank : {currentRank} 용기점수 Score : {courageScore}";
+			courageStatusText.text = $"Skill Rank : {currentRank}    brave Score : {courageScore}";
 		}
 		else
 		{
