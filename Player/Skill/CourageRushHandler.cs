@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Com.LuisPedroFonseca.ProCamera2D;
 
 /// <summary>
 /// 용기의 질주 스킬 핸들러
@@ -162,6 +163,25 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("재사용 가능 표시 이펙트")]
 	[SerializeField] private GameObject rechargeReadyEffectPrefab;
 	
+	[Header("잔상 효과")]
+	[Tooltip("잔상 생성 간격 (초)")]
+	[SerializeField] private float afterimageInterval = 0.1f;
+	
+	[Tooltip("잔상 지속 시간 (초)")]
+	[SerializeField] private float afterimageDuration = 0.5f;
+	
+	[Tooltip("잔상 시작 알파값 (0~1)")]
+	[SerializeField] private float afterimageStartAlpha = 0.7f;
+	
+	[Tooltip("잔상 색상 틴트")]
+	[SerializeField] private Color afterimageColor = new Color(0.5f, 0.8f, 1f, 1f);
+	
+	private float lastAfterimageTime = 0f;
+	
+	[Header("열 왜곡 효과")]
+	[Tooltip("열 왜곡 이펙트 프리팹 (AOE 범위에서 배경 왜곡)")]
+	[SerializeField] private GameObject heatDistortionPrefab;
+	
 	[Header("사운드 이펙트")]
 	[Tooltip("대쉬 시작 효과음")]
 	[SerializeField] private AudioClip dashStartSound;
@@ -171,6 +191,22 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("AOE 착지 효과음 딜레이 (초)")]
 	[SerializeField] private float aoeImpactSoundDelay = 0f;
+	
+	[Header("카메라 쉐이크")]
+	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착됨)")]
+	[SerializeField] private ProCamera2DShake camShake;
+	
+	[Tooltip("카메라 쉐이크 강도 (좌우, 상하)")]
+	[SerializeField] private Vector2 shakeStrength = new Vector2(0.6f, 0.6f);
+	
+	[Tooltip("카메라 쉐이크 지속 시간 (초)")]
+	[SerializeField] private float shakeDuration = 0.2f;
+	
+	[Tooltip("카메라 쉐이크 진동 횟수")]
+	[SerializeField] private int shakeVibrato = 30;
+	
+	[Tooltip("카메라 쉐이크 무작위성 (0~1)")]
+	[SerializeField] private float shakeRandomness = 0.5f;
 	
 	#endregion
 	
@@ -200,6 +236,16 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		if (skillSlot == null)
 		{
 			Debug.LogWarning("[CourageRushHandler] SkillSlot을 찾을 수 없습니다. 쿨타임 강제 초기화 기능이 작동하지 않을 수 있습니다.");
+		}
+		
+		// ProCamera2DShake 컴포넌트 찾기 (Inspector에서 할당되지 않은 경우)
+		if (camShake == null)
+		{
+			camShake = FindObjectOfType<ProCamera2DShake>();
+			if (camShake == null)
+			{
+				Debug.LogWarning("[CourageRushHandler] ProCamera2DShake 컴포넌트를 찾을 수 없습니다. 카메라 쉐이크가 작동하지 않습니다.");
+			}
 		}
 	}
 	
@@ -258,10 +304,19 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			Debug.Log("[CourageRushHandler] 대쉬 애니메이션 재생 (Attack2)");
 		}
 		
+		// 0-1. 카메라 쉐이크 (대쉬 시작 시)
+		if (camShake != null)
+		{
+			camShake.Shake(shakeDuration, shakeStrength, shakeVibrato, shakeRandomness);
+		}
+		
 		// 0-1. 충돌한 적 목록 초기화
 		hitEnemiesDuringDash.Clear();
 		
-		// 0-2. 대쉬 시작 효과음 재생
+		// 0-2. 잔상 시간 초기화
+		lastAfterimageTime = 0f;
+		
+		// 0-3. 대쉬 시작 효과음 재생
 		PlayDashStartSound();
 		
 		// 1. Rigidbody2D 가져오기 및 물리 상태 초기화
@@ -435,6 +490,13 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			// 돌진 중 적 충돌 감지
 			CheckEnemyCollisionDuringDash(currentPos, rank);
 			
+			// ⭐ 잔상 생성 (일정 간격마다)
+			if (Time.time - lastAfterimageTime >= afterimageInterval)
+			{
+				CreateAfterimage();
+				lastAfterimageTime = Time.time;
+			}
+			
 			yield return null;
 		}
 		
@@ -449,8 +511,6 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			Vector2 escapeDirection = (startPos - finalPosition).normalized;
 			finalPosition = finalPosition + (Vector3)(escapeDirection * colliderRadius);
 			playerController.transform.position = finalPosition;
-			
-			Debug.LogWarning("[CourageRush] 벽 끼임 감지! 안전한 위치로 이동");
 		}
 		
 		// 8. 무적 해제
@@ -471,7 +531,6 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			windEffect.transform.SetParent(null);
 			Destroy(windEffect, 0.5f); // 짧은 시간 후 제거
-			Debug.Log("[CourageRush] 바람 이펙트 제거");
 		}
 		
 		// 10. 물리 상태 복원
@@ -600,6 +659,20 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			aoeEffect.transform.localScale = Vector3.one * (aoeRadius * 2f);
 			
 			Destroy(aoeEffect, aoeDuration);
+		}
+		
+		// 4. 열 왜곡 효과 생성
+		if (heatDistortionPrefab != null)
+		{
+			GameObject distortion = Instantiate(heatDistortionPrefab, position, Quaternion.identity);
+			
+			// 크기 조정 (AOE 범위에 맞춤)
+			distortion.transform.localScale = Vector3.one * (aoeRadius * 2f);
+			
+			// 열 왜곡 효과는 AOE보다 조금 더 오래 유지
+			Destroy(distortion, aoeDuration + 1f);
+			
+			Debug.Log("[CourageRush] 열 왜곡 효과 생성");
 		}
 	}
 	
@@ -953,6 +1026,46 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			audioSource.PlayOneShot(trailExplosionSound);
 			Debug.Log("[CourageRushHandler] 궤적 폭발 효과음 재생");
 		}
+	}
+	
+	#endregion
+	
+	#region 잔상 효과
+	
+	/// <summary>
+	/// 플레이어의 잔상 생성
+	/// </summary>
+	private void CreateAfterimage()
+	{
+		if (playerController == null) return;
+		
+		// 플레이어의 SpriteRenderer 찾기
+		SpriteRenderer playerSprite = playerController.GetComponentInChildren<SpriteRenderer>();
+		if (playerSprite == null) return;
+		
+		// 잔상 GameObject 생성
+		GameObject afterimageObj = new GameObject("Afterimage");
+		afterimageObj.transform.position = playerController.transform.position;
+		afterimageObj.transform.rotation = playerController.transform.rotation;
+		afterimageObj.transform.localScale = playerController.transform.localScale;
+		
+		// SpriteRenderer 추가 및 설정
+		SpriteRenderer afterimageSprite = afterimageObj.AddComponent<SpriteRenderer>();
+		afterimageSprite.sprite = playerSprite.sprite;
+		afterimageSprite.sortingLayerName = playerSprite.sortingLayerName;
+		afterimageSprite.sortingOrder = playerSprite.sortingOrder - 1; // 플레이어보다 뒤에 표시
+		afterimageSprite.flipX = playerSprite.flipX;
+		afterimageSprite.flipY = playerSprite.flipY;
+		
+		// 색상 및 알파값 설정
+		Color color = afterimageColor;
+		color.a = afterimageStartAlpha;
+		afterimageSprite.color = color;
+		
+		// AfterimageEffect 컴포넌트 추가 (페이드 아웃 처리)
+		AfterimageEffect afterimageEffect = afterimageObj.AddComponent<AfterimageEffect>();
+		afterimageEffect.duration = afterimageDuration;
+		afterimageEffect.startAlpha = afterimageStartAlpha;
 	}
 	
 	#endregion
