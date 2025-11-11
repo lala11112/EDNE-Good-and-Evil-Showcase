@@ -1336,6 +1336,41 @@ public class PlayerController : EntityController
 		// S랭크 궁극기 버프 발동 (SO 데이터에서 지속 시간 가져오기)
 		float buffDuration = playerData != null ? playerData.ultimateBuffDuration : 15f;
 		ActivateUltimateBuff(buffDuration);
+		
+		// S랭크 스킬 사용 이펙트 재생
+		PlayUltimateSkillEffect();
+	}
+	
+	/// <summary>
+	/// S랭크 스킬 사용 이펙트 재생
+	/// PlayerDataSO의 ultimateSkillEffect를 플레이어의 자식으로 생성하여 플레이어를 따라다니게 합니다.
+	/// </summary>
+	private void PlayUltimateSkillEffect()
+	{
+		if (playerData == null || playerData.ultimateSkillEffect == null) return;
+		
+		// 플레이어의 자식으로 이펙트 생성 (플레이어를 따라다님)
+		GameObject effect = Instantiate(playerData.ultimateSkillEffect, transform);
+		effect.transform.localPosition = Vector3.zero; // 플레이어 중심에 위치
+		effect.transform.localRotation = Quaternion.identity; // 회전 초기화
+		
+		// 이펙트 자동 삭제 처리
+		ParticleSystem particles = effect.GetComponent<ParticleSystem>();
+		if (particles != null)
+		{
+			// ParticleSystem이 있으면 파티클이 끝난 후 삭제
+			float duration = particles.main.duration + particles.main.startLifetime.constantMax;
+			Destroy(effect, duration);
+		}
+		else
+		{
+			// ParticleSystem이 없으면 설정된 지속 시간 후 삭제
+			Destroy(effect, playerData.ultimateSkillEffectDuration);
+		}
+		
+#if UNITY_EDITOR
+		Debug.Log($"[PlayerController] S랭크 스킬 사용 이펙트 재생: {playerData.ultimateSkillEffect.name} (플레이어 자식으로 생성)");
+#endif
 	}
 	
 	/// <summary>

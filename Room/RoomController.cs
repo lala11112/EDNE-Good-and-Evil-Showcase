@@ -638,22 +638,8 @@ public class RoomController : MonoBehaviour
             // 아이템 등록
             RegisterItem(item);
 
-            // 스폰 이펙트 재생
-            if (itemSpawnData.spawnEffect != null)
-            {
-                GameObject effect = Instantiate(itemSpawnData.spawnEffect, spawnPosition, Quaternion.identity);
-                
-                // 이펙트 자동 삭제
-                ParticleSystem particles = effect.GetComponent<ParticleSystem>();
-                if (particles != null)
-                {
-                    Destroy(effect, particles.main.duration + particles.main.startLifetime.constantMax);
-                }
-                else
-                {
-                    Destroy(effect, 2f);
-                }
-            }
+            // ⭐ 스폰 이펙트는 ItemBase의 Awake에서 ItemDataSO의 spawnEffect를 자식으로 소환하므로
+            // 여기서는 처리하지 않음 (ItemSpawnData의 spawnEffect는 더 이상 사용하지 않음)
 
             Debug.Log($"[RoomController] 아이템 스폰: {item.ItemData?.itemName ?? "Unknown"} at {spawnPosition}");
         }

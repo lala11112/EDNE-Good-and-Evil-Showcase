@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Com.LuisPedroFonseca.ProCamera2D;
 
 /// <summary>
 /// 거철의 검무 스킬 핸들러
@@ -123,6 +124,22 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("스트라이크 존 적중 효과음")]
 	[SerializeField] private AudioClip strikeZoneHitSound;
 	
+	[Header("카메라 쉐이크")]
+	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착됨)")]
+	[SerializeField] private ProCamera2DShake camShake;
+	
+	[Tooltip("카메라 쉐이크 강도 (좌우, 상하) - 용기의 질주보다 약하게 설정")]
+	[SerializeField] private Vector2 shakeStrength = new Vector2(0.3f, 0.3f);
+	
+	[Tooltip("카메라 쉐이크 지속 시간 (초)")]
+	[SerializeField] private float shakeDuration = 0.15f;
+	
+	[Tooltip("카메라 쉐이크 진동 횟수")]
+	[SerializeField] private int shakeVibrato = 20;
+	
+	[Tooltip("카메라 쉐이크 무작위성 (0~1)")]
+	[SerializeField] private float shakeRandomness = 0.4f;
+	
 	#endregion
 	
 	#region SkillHandlerInterface 구현
@@ -155,6 +172,16 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 		if (skillSlot == null)
 		{
 			Debug.LogWarning("[IronBladeDanceHandler] SkillSlot을 찾을 수 없습니다.");
+		}
+		
+		// ProCamera2DShake 컴포넌트 찾기 (Inspector에서 할당되지 않은 경우)
+		if (camShake == null)
+		{
+			camShake = FindObjectOfType<ProCamera2DShake>();
+			if (camShake == null)
+			{
+				Debug.LogWarning("[IronBladeDanceHandler] ProCamera2DShake 컴포넌트를 찾을 수 없습니다. 카메라 쉐이크가 작동하지 않습니다.");
+			}
 		}
 		
 		Debug.Log("[IronBladeDanceHandler] Setup 완료");
@@ -226,7 +253,13 @@ public class IronBladeDanceHandler : MonoBehaviour, SkillHandlerInterface
 			Debug.Log("[IronBladeDanceHandler] 검무 애니메이션 재생 (Attack1)");
 		}
 		
-		// 0-1. 검무 휘두르기 효과음 재생
+		// 0-1. 카메라 쉐이크 (검무 사용 시)
+		if (camShake != null)
+		{
+			camShake.Shake(shakeDuration, shakeStrength, shakeVibrato, shakeRandomness);
+		}
+		
+		// 0-2. 검무 휘두르기 효과음 재생
 		PlayBladeDanceSound();
 		
 		// 1. 범위 계산 (랭크별)
