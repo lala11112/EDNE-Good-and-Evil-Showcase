@@ -16,6 +16,18 @@ public partial class MonsterController : EntityController
     [Tooltip("스킬 시스템 활성화 여부")]
     [SerializeField] private bool enableSkills = true;
     
+	[Header("초기 스킬 지연")]
+	[Tooltip("스폰 후 첫 공격/스킬 사용 전 지연을 사용할지 여부")]
+	[SerializeField] private bool useInitialAttackDelay = false;
+	[Tooltip("첫 공격/스킬 사용 전 대기 시간(초)")]
+	[SerializeField] private float initialAttackDelay = 1.0f;
+	[Tooltip("첫 스킬 지연 동안 이동도 정지합니다")]
+	[SerializeField] private bool blockMovementDuringInitialDelay = false;
+
+	// 첫 스킬 지연 상태
+	private float initialAttackTimer = 0f;
+	private bool initialDelayConsumed = true;
+	
     private float[] skillCooldownTimers;
     private bool isSkillActive = false; // 스킬 사용 중이면 새 스킬 사용 불가
     
@@ -40,6 +52,24 @@ public partial class MonsterController : EntityController
             
             Debug.Log($"[MonsterController] {gameObject.name} 스킬 시스템 초기화 (스킬 수: {skillPriorities.Length})");
         }
+
+		// 첫 스킬 지연 초기화
+		if (useInitialAttackDelay)
+		{
+			initialAttackTimer = Mathf.Max(0f, initialAttackDelay);
+			initialDelayConsumed = initialAttackTimer <= 0f;
+
+			// 요청 시: 대기 시간 동안 이동도 확실히 정지
+			if (blockMovementDuringInitialDelay && initialAttackTimer > 0f)
+			{
+				LockMovement(initialAttackTimer);
+			}
+		}
+		else
+		{
+			initialAttackTimer = 0f;
+			initialDelayConsumed = true;
+		}
     }
     
     /// <summary>
@@ -59,6 +89,17 @@ public partial class MonsterController : EntityController
     /// </summary>
     private void ProcessSkills()
     {
+		// 스폰 직후 첫 스킬 지연 (한 번만 적용)
+		if (!initialDelayConsumed)
+		{
+			if (initialAttackTimer > 0f)
+			{
+				initialAttackTimer -= Time.deltaTime;
+				if (initialAttackTimer > 0f) return;
+			}
+			initialDelayConsumed = true;
+		}
+
         if (!enableSkills || skillPriorities == null || skillPriorities.Length == 0) return;
         if (target == null) return;
         if (isSkillActive) return; // ⭐ 스킬 사용 중이면 새로운 스킬 사용 불가

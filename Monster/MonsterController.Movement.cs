@@ -15,7 +15,17 @@ public partial class MonsterController : EntityController
     {
         // ⭐ NavMeshAgent가 비활성화되어 있으면 이동 처리 안함 (죽은 상태 등)
         if (navAgent == null || !navAgent.enabled || !navAgent.isOnNavMesh) return;
-        if (target == null) return;
+
+		// 첫 스킬 지연 동안 이동도 막기 (옵션)
+		// 같은 partial 클래스의 필드를 사용합니다: blockMovementDuringInitialDelay, initialDelayConsumed
+		if (blockMovementDuringInitialDelay && !initialDelayConsumed)
+		{
+			StopMovement();
+			return;
+		}
+
+		if (target == null) return;
+
         if (!isMovementEnabled) return;
         if (monsterData == null) return;
         if (!monsterData.canMove) return;
@@ -88,9 +98,10 @@ public partial class MonsterController : EntityController
     private void StopMovement()
     {
         // ⭐ NavMeshAgent가 활성화되어 있고 NavMesh에 있을 때만 정지 명령
-        if (navAgent != null && navAgent.enabled && navAgent.isOnNavMesh && !navAgent.isStopped)
+		if (navAgent != null && navAgent.enabled && navAgent.isOnNavMesh)
         {
-            navAgent.isStopped = true;
+			if (!navAgent.isStopped) navAgent.isStopped = true;
+			try { navAgent.ResetPath(); } catch { }
         }
     }
     

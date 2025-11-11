@@ -112,6 +112,16 @@ public class LineSweepSkillHandler : MonoBehaviour, SkillHandlerInterface
     [Tooltip("여러 방향을 지정 (예: (1,0), (0,1) 로 가로+세로)")]
     [SerializeField] private Vector2[] directions;
 
+	[Header("교대 패턴 (A/B 번갈아)")]
+	[Tooltip("두 개의 방향 세트를 번갈아 사용합니다 (사용 시 위 '다중 방향' 대신 본 옵션이 우선).")]
+	[SerializeField] private bool useAlternatingDirectionSets = false;
+	[Tooltip("세트 A 방향들 (예: (1,0), (0,-1) → 가로/세로)")]
+	[SerializeField] private Vector2[] directionSetA;
+	[Tooltip("세트 B 방향들 (예: (1,-1), (-1,-1) → 대각선 교차)")]
+	[SerializeField] private Vector2[] directionSetB;
+	[Tooltip("첫 실행 시 세트 A부터 시작할지 여부")]
+	[SerializeField] private bool startWithSetA = true;
+
     // ShockWave 이동 막대는 제거. 요청에 따라 텔레그래프 막대 + 투사체만 사용
     [Header("Debug")]
     [SerializeField] private bool debugLogs = false;
@@ -124,6 +134,10 @@ public class LineSweepSkillHandler : MonoBehaviour, SkillHandlerInterface
 
     private MonsterSkillData skillData;
     private GameObject owner;
+
+	// 핸들러 인스턴스 간에도 교대를 유지하기 위한 정적 토글
+	private static bool s_nextUseSetAInitialized = false;
+	private static bool s_nextUseSetA = true;
 
     public void Setup(BaseSkillData skill, GameObject owner)
     {
@@ -151,6 +165,13 @@ public class LineSweepSkillHandler : MonoBehaviour, SkillHandlerInterface
 
     private IEnumerator CoUse()
     {
+		// 교대 토글 초기화 (프로젝트 실행 중 최초 1회)
+		if (!s_nextUseSetAInitialized)
+		{
+			s_nextUseSetA = startWithSetA;
+			s_nextUseSetAInitialized = true;
+		}
+
         if (!useManualBounds && mapCollider == null)
         {
             // 이름 우선 탐색 (상위/하위 포함)
@@ -198,21 +219,47 @@ public class LineSweepSkillHandler : MonoBehaviour, SkillHandlerInterface
             yield break;
         }
 
-        // 방향 목록 준비
-        System.Collections.Generic.List<Vector2> dirList = new System.Collections.Generic.List<Vector2>();
-        if (useMultiDirections && directions != null && directions.Length > 0)
-        {
-            for (int i = 0; i < directions.Length; i++)
-            {
-                Vector2 d = directions[i];
-                if (d.sqrMagnitude > 1e-6f) dirList.Add(d.normalized);
-            }
-        }
-        if (dirList.Count == 0)
-        {
-            Vector2 baseDir = direction.sqrMagnitude < 1e-6f ? Vector2.down : direction;
-            dirList.Add(baseDir.normalized);
-        }
+		// 방향 목록 준비
+		System.Collections.Generic.List<Vector2> dirList = new System.Collections.Generic.List<Vector2>();
+		if (useAlternatingDirectionSets)
+		{
+			// 이번 실행에 사용할 세트 선택
+			Vector2[] pick = s_nextUseSetA ? directionSetA : directionSetB;
+			if (pick != null && pick.Length > 0)
+			{
+				for (int i = 0; i < pick.Length; i++)
+				{
+					Vector2 d = pick[i];
+					if (d.sqrMagnitude > 1e-6f) dirList.Add(d.normalized);
+				}
+			}
+
+			// 유효한 방향이 없으면 단일 기본 방향 사용
+			if (dirList.Count == 0)
+			{
+				Vector2 baseDir = direction.sqrMagnitude < 1e-6f ? Vector2.down : direction;
+				dirList.Add(baseDir.normalized);
+			}
+
+			// 다음 실행 때는 반대 세트를 사용하도록 토글
+			s_nextUseSetA = !s_nextUseSetA;
+		}
+		else
+		{
+			if (useMultiDirections && directions != null && directions.Length > 0)
+			{
+				for (int i = 0; i < directions.Length; i++)
+				{
+					Vector2 d = directions[i];
+					if (d.sqrMagnitude > 1e-6f) dirList.Add(d.normalized);
+				}
+			}
+			if (dirList.Count == 0)
+			{
+				Vector2 baseDir = direction.sqrMagnitude < 1e-6f ? Vector2.down : direction;
+				dirList.Add(baseDir.normalized);
+			}
+		}
         Bounds b;
         if (useManualBounds)
         {
