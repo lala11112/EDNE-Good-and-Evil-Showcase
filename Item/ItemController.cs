@@ -337,6 +337,7 @@ public class ItemController : MonoBehaviour
     /// 방 진입 시 호출 (운명의 주사위 효과 재생성)
     /// RoomController에서 호출됩니다.
     /// 새로운 방에 진입할 때마다 효과가 재생성됩니다.
+    /// 방 클리어 시에는 효과가 유지되며, 다음 방 진입 시에만 새로운 효과가 생성됩니다.
     /// </summary>
     public void OnRoomEntered()
     {
@@ -349,17 +350,15 @@ public class ItemController : MonoBehaviour
     }
     
     /// <summary>
-    /// 방 클리어 시 호출 (운명의 주사위 효과 재생성)
+    /// 방 클리어 시 호출
     /// RoomController에서 호출됩니다.
+    /// 운명의 주사위 효과는 방 진입 시에만 재생성되며, 방 클리어 시에는 유지됩니다.
     /// </summary>
     public void OnRoomCleared()
     {
-        if (isDiceActive)
-        {
-            // 기존 효과 초기화 및 새로운 효과 생성
-            GenerateDiceEffect();
-            Debug.Log("[ItemController] 방 클리어: 운명의 주사위 효과 재생성");
-        }
+        // 운명의 주사위 효과는 방 진입 시에만 재생성
+        // 방 클리어 시에는 효과를 유지합니다.
+        Debug.Log("[ItemController] 방 클리어: 운명의 주사위 효과 유지");
     }
     
     #endregion
