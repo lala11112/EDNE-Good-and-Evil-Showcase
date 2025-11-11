@@ -44,21 +44,15 @@ public class AfterimageController : MonoBehaviour
 	[Tooltip("돌진 완료 여부")]
 	private bool hasReachedTarget = false;
 	
-	[Header("360도 회전 참격 연출")]
-	[Tooltip("회전 참격 활성화 여부")]
-	private bool isSlashing = false;
+	[Header("Attack2 애니메이션 연출")]
+	[Tooltip("공격 애니메이션 활성화 여부")]
+	private bool isAttacking = false;
 	
-	[Tooltip("회전 속도 (도/초)")]
-	[SerializeField] private float rotationSpeed = 1080f; // 1초에 3바퀴
+	[Tooltip("공격 애니메이션 지속 시간 (초)")]
+	[SerializeField] private float attackDuration = 0.5f;
 	
-	[Tooltip("회전 지속 시간 (초)")]
-	[SerializeField] private float slashDuration = 0.3f;
-	
-	[Tooltip("회전 경과 시간")]
-	private float slashElapsedTime = 0f;
-	
-	[Tooltip("참격 이펙트 프리팹 (사용자가 설정)")]
-	[SerializeField] private GameObject slashEffectPrefab;
+	[Tooltip("공격 경과 시간")]
+	private float attackElapsedTime = 0f;
 	
 	#endregion
 	
@@ -68,14 +62,29 @@ public class AfterimageController : MonoBehaviour
 	[Tooltip("스프라이트 렌더러")]
 	[SerializeField] private SpriteRenderer spriteRenderer;
 	
+	[Tooltip("애니메이터 (attack2 애니메이션 재생용)")]
+	[SerializeField] private Animator animator;
+	
 	[Tooltip("페이드아웃 시간 (소멸 전)")]
 	[SerializeField] private float fadeOutDuration = 0.5f;
 	
 	[Tooltip("초기 알파값")]
 	[SerializeField] private float initialAlpha = 0.5f;
 	
+	[Tooltip("참격 이펙트 프리팹 (적 위치에 생성)")]
+	[SerializeField] private GameObject slashHitEffectPrefab;
+	
 	[Tooltip("폭발 이펙트 프리팹 (S랭크)")]
 	[SerializeField] private GameObject explosionEffectPrefab;
+	
+	[Header("사운드")]
+	[Tooltip("돌진 시작 효과음")]
+	[SerializeField] private AudioClip rushStartSound;
+	
+	[Tooltip("참격 효과음")]
+	[SerializeField] private AudioClip slashSound;
+	
+	private AudioSource audioSource;
 	
 	#endregion
 	
@@ -100,6 +109,20 @@ public class AfterimageController : MonoBehaviour
 		{
 			spriteRenderer = GetComponent<SpriteRenderer>();
 		}
+		
+		if (animator == null)
+		{
+			animator = GetComponent<Animator>();
+		}
+		
+		// AudioSource 자동 할당 또는 추가
+		audioSource = GetComponent<AudioSource>();
+		if (audioSource == null)
+		{
+			audioSource = gameObject.AddComponent<AudioSource>();
+			audioSource.playOnAwake = false;
+			audioSource.spatialBlend = 0f; // 2D 사운드
+		}
 	}
 	
 	private void OnEnable()
@@ -108,8 +131,8 @@ public class AfterimageController : MonoBehaviour
 		isActivated = false;
 		hasReachedTarget = false;
 		targetEnemy = null;
-		isSlashing = false;
-		slashElapsedTime = 0f;
+		isAttacking = false;
+		attackElapsedTime = 0f;
 		
 		// 초기 알파 설정
 		if (spriteRenderer != null)
@@ -128,20 +151,16 @@ public class AfterimageController : MonoBehaviour
 		// 이미 트리거되었으면 무시
 		if (isTriggered) return;
 		
-		// ⭐ 회전 참격 연출 중
-		if (isSlashing)
+		// ⭐ Attack2 애니메이션 연출 중
+		if (isAttacking)
 		{
-			slashElapsedTime += Time.deltaTime;
+			attackElapsedTime += Time.deltaTime;
 			
-			// 360도 회전
-			float rotationAmount = rotationSpeed * Time.deltaTime;
-			transform.Rotate(0, 0, rotationAmount);
-			
-			// 회전 완료
-			if (slashElapsedTime >= slashDuration)
+			// 공격 애니메이션 완료
+			if (attackElapsedTime >= attackDuration)
 			{
 				// 데미지 적용 및 파괴
-				ExecuteSlashAttack();
+				ExecuteAttack();
 			}
 			
 			return;
@@ -163,7 +182,7 @@ public class AfterimageController : MonoBehaviour
 		if (distance < 0.5f && !hasReachedTarget)
 		{
 			hasReachedTarget = true;
-			StartSlashAttack();
+			StartAttackAnimation();
 		}
 	}
 	
@@ -174,7 +193,7 @@ public class AfterimageController : MonoBehaviour
 	/// <summary>
 	/// 잔상 초기화 (비활성 상태로 설치)
 	/// </summary>
-	public void SetupAsInactive(float damage, bool isSRankMode, Sprite playerSprite = null, SkillSlotType? skillSlotType = null)
+	public void SetupAsInactive(float damage, bool isSRankMode, Sprite playerSprite = null, SkillSlotType? skillSlotType = null, RuntimeAnimatorController animatorController = null, AudioClip rushSound = null, AudioClip attackSound = null)
 	{
 		this.damage = damage;
 		this.isSRankMode = isSRankMode;
@@ -184,6 +203,10 @@ public class AfterimageController : MonoBehaviour
 		this.targetEnemy = null;
 		this.skillSlotType = skillSlotType;
 		
+		// 효과음 설정
+		this.rushStartSound = rushSound;
+		this.slashSound = attackSound;
+		
 		// 플레이어 스프라이트 복사
 		if (spriteRenderer != null && playerSprite != null)
 		{
@@ -191,6 +214,13 @@ public class AfterimageController : MonoBehaviour
 			Color color = spriteRenderer.color;
 			color.a = initialAlpha;
 			spriteRenderer.color = color;
+		}
+		
+		// 플레이어 애니메이터 컨트롤러 복사
+		if (animator != null && animatorController != null)
+		{
+			animator.runtimeAnimatorController = animatorController;
+			Debug.Log("[AfterimageController] 애니메이터 컨트롤러 복사 완료");
 		}
 		
 		// 콜라이더 비활성화 (설치 모드에서는 충돌 안 함)
@@ -223,6 +253,13 @@ public class AfterimageController : MonoBehaviour
 			Debug.Log($"[AfterimageController] 공격 범위 내 적 없음. 잔상 제거.");
 			Destroy(gameObject, 0.5f);
 			return;
+		}
+		
+		// ⭐ 돌진 시작 효과음 재생
+		if (rushStartSound != null && audioSource != null)
+		{
+			audioSource.PlayOneShot(rushStartSound);
+			Debug.Log($"[AfterimageController] 🔊 돌진 효과음 재생!");
 		}
 		
 		Debug.Log($"[AfterimageController] 💥 활성화! 대상: {targetEnemy.name}");
@@ -285,8 +322,8 @@ public class AfterimageController : MonoBehaviour
 		// 죽은 적은 무시
 		if (!entity.IsAlive) return;
 		
-		// 잔상 공격 (돌진 중 충돌)
-		AttackTarget();
+		// 잔상 공격 (돌진 중 충돌 - 바로 attack2 애니메이션 시작)
+		StartAttackAnimation();
 	}
 	
 	#endregion
@@ -294,30 +331,34 @@ public class AfterimageController : MonoBehaviour
 	#region 잔상 공격
 	
 	/// <summary>
-	/// 360도 회전 참격 시작
+	/// Attack2 애니메이션 시작
 	/// </summary>
-	private void StartSlashAttack()
+	private void StartAttackAnimation()
 	{
-		if (isTriggered || isSlashing) return;
+		if (isTriggered || isAttacking) return;
 		
-		isSlashing = true;
-		slashElapsedTime = 0f;
+		isAttacking = true;
+		attackElapsedTime = 0f;
 		
-		// 참격 이펙트 생성
-		if (slashEffectPrefab != null)
+		// ⭐ 참격 효과음 재생
+		if (slashSound != null && audioSource != null)
 		{
-			GameObject effect = Instantiate(slashEffectPrefab, transform.position, Quaternion.identity);
-			effect.transform.SetParent(transform); // 잔상과 함께 회전
-			Destroy(effect, slashDuration + 0.1f); // 회전 끝나면 파괴
-			
-			Debug.Log($"[AfterimageController] ⚔️ 360도 회전 참격 시작!");
+			audioSource.PlayOneShot(slashSound);
+			Debug.Log($"[AfterimageController] 🔊 참격 효과음 재생!");
+		}
+		
+		// Attack2 애니메이션 트리거
+		if (animator != null)
+		{
+			animator.SetTrigger("Attack2");
+			Debug.Log($"[AfterimageController] ⚔️ Attack2 애니메이션 시작!");
 		}
 	}
 	
 	/// <summary>
-	/// 회전 참격 완료 후 데미지 적용
+	/// Attack2 애니메이션 완료 후 데미지 적용
 	/// </summary>
-	private void ExecuteSlashAttack()
+	private void ExecuteAttack()
 	{
 		if (isTriggered) return;
 		isTriggered = true;
@@ -332,9 +373,12 @@ public class AfterimageController : MonoBehaviour
 			// 일반: 단일 타겟 데미지
 			if (targetEnemy != null && targetEnemy.IsAlive)
 			{
+				// ⭐ 적 위치에 참격 이펙트 생성
+				SpawnSlashHitEffect(targetEnemy.transform.position);
+				
 				// ⭐ 자기 자신을 데미지 소스로 전달 (용기 시스템용)
 				targetEnemy.ApplyDamage((int)damage, EntityType.Player, this);
-				Debug.Log($"[AfterimageController] ⚔️ 회전 참격 완료! {targetEnemy.name}에게 {(int)damage} 데미지!");
+				Debug.Log($"[AfterimageController] ⚔️ Attack2 완료! {targetEnemy.name}에게 {(int)damage} 데미지!");
 			}
 		}
 		
@@ -343,11 +387,16 @@ public class AfterimageController : MonoBehaviour
 	}
 	
 	/// <summary>
-	/// 대상 공격 (충돌 시 - 바로 회전 참격 시작)
+	/// 적 위치에 참격 이펙트 생성
 	/// </summary>
-	private void AttackTarget()
+	private void SpawnSlashHitEffect(Vector3 position)
 	{
-		StartSlashAttack();
+		if (slashHitEffectPrefab == null) return;
+		
+		GameObject effect = Instantiate(slashHitEffectPrefab, position, Quaternion.identity);
+		Destroy(effect, 1f); // 1초 후 자동 파괴
+		
+		Debug.Log($"[AfterimageController] 💥 참격 이펙트 생성!");
 	}
 	
 	/// <summary>
@@ -365,6 +414,9 @@ public class AfterimageController : MonoBehaviour
 			EntityController entity = hit.GetComponent<EntityController>();
 			if (entity != null && entity.EntityType != EntityType.Player && entity.IsAlive)
 			{
+				// ⭐ 적 위치에 참격 이펙트 생성
+				SpawnSlashHitEffect(entity.transform.position);
+				
 				// ⭐ 자기 자신을 데미지 소스로 전달 (용기 시스템용)
 				entity.ApplyDamage((int)explosionDamage, EntityType.Player, this);
 			}

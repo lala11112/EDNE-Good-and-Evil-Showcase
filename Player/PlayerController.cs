@@ -40,6 +40,31 @@ public class PlayerController : EntityController
 	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착)")]
 	[SerializeField] private ProCamera2DShake camShake;
 
+	[Header("용기 랭크 사운드")]
+	[Tooltip("D→C 랭크 상승 효과음")]
+	[SerializeField] private AudioClip rankUpToCSound;
+	
+	[Tooltip("C→B 랭크 상승 효과음")]
+	[SerializeField] private AudioClip rankUpToBSound;
+	
+	[Tooltip("B→A 랭크 상승 효과음")]
+	[SerializeField] private AudioClip rankUpToASound;
+	
+	[Tooltip("A→S 랭크 상승 효과음")]
+	[SerializeField] private AudioClip rankUpToSSound;
+	
+	[Tooltip("랭크 하락 효과음")]
+	[SerializeField] private AudioClip rankDownSound;
+	
+	[Header("플레이어 사운드")]
+	[Tooltip("플레이어 피격 효과음")]
+	[SerializeField] private AudioClip playerHitSound;
+	
+	[Tooltip("플레이어 사망 효과음 (PlayerDataSO.deathSound가 우선, 없으면 이 사운드 사용)")]
+	[SerializeField] private AudioClip playerDeathSound;
+	
+	private AudioSource audioSource;
+
 	[Header("입력 시스템")]
 	[Tooltip("Input Action Asset (Generate C# Class를 사용하지 않는 경우)")]
 	[SerializeField] private InputActionAsset inputActions;
@@ -355,6 +380,15 @@ public class PlayerController : EntityController
 		{
 			camShake = FindObjectOfType<ProCamera2DShake>();
 		}
+		
+		// AudioSource 자동 할당 또는 추가
+		audioSource = GetComponent<AudioSource>();
+		if (audioSource == null)
+		{
+			audioSource = gameObject.AddComponent<AudioSource>();
+			audioSource.playOnAwake = false;
+			audioSource.spatialBlend = 0f; // 2D 사운드
+		}
 	}
 
 	protected override void OnEnable()
@@ -519,6 +553,9 @@ public class PlayerController : EntityController
 
 		courageScore = playerData.initialCourageScore;
 		UpdateCourageState();
+
+		// ⭐ 용기 점수 초기 이벤트 발생 (UI 초기화용)
+		PlayerStatusEvents.InvokeCourageChanged(courageScore, currentCourageState);
 
 		// ⭐ 랭크 시스템 디버그: 초기 랭크 출력
 #if UNITY_EDITOR
@@ -723,10 +760,14 @@ public class PlayerController : EntityController
 		// 용기 단계 재계산
 		UpdateCourageState();
 
+		// ⭐ 용기 점수 변경 이벤트 발생 (UI 업데이트용)
+		PlayerStatusEvents.InvokeCourageChanged(courageScore, currentCourageState);
+
 		// 단계 변경 이벤트
 		if (previousState != currentCourageState)
 		{
 			OnCourageStateChanged(previousState, currentCourageState);
+			PlayerStatusEvents.InvokeCourageStateChanged(previousState, currentCourageState);
 		}
 
 		// ⭐ 랭크 변경 디버그
@@ -746,6 +787,9 @@ public class PlayerController : EntityController
 		courageScore = score;
 		UpdateCourageState();
 		CheckDespairState();
+		
+		// ⭐ 용기 점수 변경 이벤트 발생 (UI 업데이트용)
+		PlayerStatusEvents.InvokeCourageChanged(courageScore, currentCourageState);
 	}
 
 	/// <summary>
@@ -829,9 +873,19 @@ public class PlayerController : EntityController
 	/// </summary>
 	protected virtual void OnCourageStateChanged(CourageState previousState, CourageState newState)
 	{
+		// 이전 랭크와 새로운 랭크 계산
+		SkillRank previousRank = GetSkillRankFromCourageState(previousState);
+		SkillRank newRank = GetSkillRankFromCourageState(newState);
+		
 #if UNITY_EDITOR
-		Debug.Log($"[PlayerController] 용기 단계 변경: {previousState} → {newState} (스킬 랭크: {currentSkillRank}, 용기 점수: {courageScore})");
+		Debug.Log($"[PlayerController] 용기 단계 변경: {previousState} → {newState} (스킬 랭크: {previousRank} → {newRank}, 용기 점수: {courageScore})");
 #endif
+		
+		// 랭크 변경 시 효과음 재생
+		if (previousRank != newRank)
+		{
+			PlayRankChangeSound(previousRank, newRank);
+		}
 		
 		// 자식 클래스 또는 이벤트 시스템에서 처리:
 		// - UI 업데이트
@@ -850,6 +904,56 @@ public class PlayerController : EntityController
 		// - 게임오버 UI
 		// - 씬 전환
 		// - 데이터 저장
+	}
+	
+	/// <summary>
+	/// 랭크 변경 시 효과음 재생
+	/// </summary>
+	/// <param name="previousRank">이전 랭크</param>
+	/// <param name="newRank">새로운 랭크</param>
+	private void PlayRankChangeSound(SkillRank previousRank, SkillRank newRank)
+	{
+		if (audioSource == null) return;
+		
+		// 랭크 상승 여부 확인
+		bool isRankUp = (int)newRank > (int)previousRank;
+		
+		AudioClip soundToPlay = null;
+		
+		if (isRankUp)
+		{
+			// 랭크 상승 효과음
+			switch (newRank)
+			{
+				case SkillRank.C:
+					soundToPlay = rankUpToCSound;
+					break;
+				case SkillRank.B:
+					soundToPlay = rankUpToBSound;
+					break;
+				case SkillRank.A:
+					soundToPlay = rankUpToASound;
+					break;
+				case SkillRank.S:
+					soundToPlay = rankUpToSSound;
+					break;
+			}
+		}
+		else
+		{
+			// 랭크 하락 효과음
+			soundToPlay = rankDownSound;
+		}
+		
+		// 효과음 재생
+		if (soundToPlay != null)
+		{
+			audioSource.PlayOneShot(soundToPlay);
+			
+#if UNITY_EDITOR
+			Debug.Log($"[PlayerController] 🔊 랭크 변경 효과음 재생: {previousRank} → {newRank} ({(isRankUp ? "상승" : "하락")})");
+#endif
+		}
 	}
 
 	/// <summary>
@@ -2275,6 +2379,15 @@ public class PlayerController : EntityController
 			hitShake.ApplyShake(camShake, damageAmount);
 		}
 		
+		// ⭐ 피격 효과음 재생
+		if (damageAmount > 0 && playerHitSound != null && audioSource != null)
+		{
+			audioSource.PlayOneShot(playerHitSound);
+#if UNITY_EDITOR
+			Debug.Log($"[PlayerController] 🔊 피격 효과음 재생 (데미지: {damageAmount})");
+#endif
+		}
+		
 		// ⭐ 피격 애니메이션 재생
 		if (animator != null && isAlive)
 		{
@@ -2428,19 +2541,25 @@ public class PlayerController : EntityController
 			Debug.Log($"[PlayerController] 사망 이펙트 생성: {playerData.deathEffectPrefab.name}");
 		}
 		
-		// 2. 사망 사운드 재생
+		// 2. 사망 사운드 재생 (PlayerDataSO.deathSound 우선, 없으면 playerDeathSound)
+		AudioClip deathSoundToPlay = null;
+		
 		if (playerData.deathSound != null)
 		{
-			AudioSource audioSource = GetComponent<AudioSource>();
-			if (audioSource == null)
-			{
-				audioSource = gameObject.AddComponent<AudioSource>();
-				audioSource.playOnAwake = false;
-				audioSource.spatialBlend = 0f; // 2D 사운드
-			}
-			audioSource.PlayOneShot(playerData.deathSound);
+			deathSoundToPlay = playerData.deathSound;
+		}
+		else if (playerDeathSound != null)
+		{
+			deathSoundToPlay = playerDeathSound;
+		}
+		
+		if (deathSoundToPlay != null && audioSource != null)
+		{
+			audioSource.PlayOneShot(deathSoundToPlay);
 			
-			Debug.Log($"[PlayerController] 사망 사운드 재생: {playerData.deathSound.name}");
+#if UNITY_EDITOR
+			Debug.Log($"[PlayerController] 🔊 사망 효과음 재생: {deathSoundToPlay.name}");
+#endif
 		}
 		
 		// 3. 카메라 쉐이크

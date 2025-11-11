@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Com.LuisPedroFonseca.ProCamera2D;
 
 /// <summary>
 /// 빗발치는 믿음 스킬 핸들러 (리워크)
@@ -105,6 +106,9 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("플레이어 스프라이트 렌더러 (잔상 복사용)")]
 	[SerializeField] private SpriteRenderer playerSpriteRenderer;
 	
+	[Tooltip("플레이어 애니메이터 (잔상 애니메이션용)")]
+	[SerializeField] private Animator playerAnimator;
+	
 	[Tooltip("설치 모드 시 변경할 아이콘 (null이면 변경 안 함)")]
 	[SerializeField] private Sprite setupModeIcon;
 	
@@ -114,6 +118,34 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 	
 	[Tooltip("잔상 생성 효과음")]
 	[SerializeField] private AudioClip afterimageSpawnSound;
+	
+	[Tooltip("잔상 돌진 효과음")]
+	[SerializeField] private AudioClip afterimageRushSound;
+	
+	[Tooltip("잔상 참격 효과음")]
+	[SerializeField] private AudioClip afterimageSlashSound;
+	
+	[Header("카메라 쉐이크")]
+	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착됨)")]
+	[SerializeField] private ProCamera2DShake camShake;
+	
+	[Tooltip("잔상 생성 시 카메라 쉐이크 강도 (좌우, 상하)")]
+	[SerializeField] private Vector2 afterimageShakeStrength = new Vector2(0.1f, 0.1f);
+	
+	[Tooltip("잔상 생성 시 카메라 쉐이크 지속 시간 (초)")]
+	[SerializeField] private float afterimageShakeDuration = 0.1f;
+	
+	[Tooltip("잔상 돌진 시 카메라 쉐이크 강도 (좌우, 상하)")]
+	[SerializeField] private Vector2 explosionShakeStrength = new Vector2(0.8f, 0.8f);
+	
+	[Tooltip("잔상 돌진 시 카메라 쉐이크 지속 시간 (초)")]
+	[SerializeField] private float explosionShakeDuration = 0.3f;
+	
+	[Tooltip("카메라 쉐이크 진동 횟수")]
+	[SerializeField] private int shakeVibrato = 30;
+	
+	[Tooltip("카메라 쉐이크 무작위성 (0~1)")]
+	[SerializeField] private float shakeRandomness = 0.5f;
 	
 	#endregion
 	
@@ -155,11 +187,27 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			playerSpriteRenderer = playerController.GetComponentInChildren<SpriteRenderer>();
 		}
 		
+		// 플레이어 애니메이터 찾기
+		if (playerAnimator == null)
+		{
+			playerAnimator = playerController.GetComponentInChildren<Animator>();
+		}
+		
 		// SkillSlot 찾기 (쿨타임 시작용)
 		skillSlot = GetComponentInParent<SkillSlot>();
 		if (skillSlot == null)
 		{
 			Debug.LogWarning("[RainOfFaithHandler] SkillSlot을 찾을 수 없습니다.");
+		}
+		
+		// ProCamera2DShake 컴포넌트 찾기 (Inspector에서 할당되지 않은 경우)
+		if (camShake == null)
+		{
+			camShake = FindObjectOfType<ProCamera2DShake>();
+			if (camShake == null)
+			{
+				Debug.LogWarning("[RainOfFaithHandler] ProCamera2DShake 컴포넌트를 찾을 수 없습니다. 카메라 쉐이크가 작동하지 않습니다.");
+			}
 		}
 		
 		// 다른 스킬 사용 감지를 위한 이벤트 구독
@@ -329,6 +377,13 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		
 		Debug.Log($"[RainOfFaithHandler] 💥 폭발 시작! 총 {installedAfterimages.Count}개의 잔상이 적을 공격합니다!");
 		
+		// ⭐ 카메라 쉐이크 (큰 효과 - 돌진 시작)
+		if (camShake != null)
+		{
+			camShake.Shake(explosionShakeDuration, explosionShakeStrength, shakeVibrato, shakeRandomness);
+			Debug.Log($"[RainOfFaithHandler] 📷 돌진 카메라 쉐이크!");
+		}
+		
 		// 설치 모드 종료
 		StopSetupMode();
 		
@@ -469,6 +524,12 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 		// 잔상 생성 효과음 재생 (볼륨을 낮게)
 		PlayAfterimageSpawnSound();
 		
+		// ⭐ 카메라 쉐이크 (작은 효과 - 잔상 생성)
+		if (camShake != null)
+		{
+			camShake.Shake(afterimageShakeDuration, afterimageShakeStrength, shakeVibrato, shakeRandomness);
+		}
+		
 		// 잔상 생성 (비활성 상태)
 		GameObject afterimageObj = Instantiate(afterimagePrefab, position, Quaternion.identity);
 		AfterimageController afterimage = afterimageObj.GetComponent<AfterimageController>();
@@ -483,10 +544,15 @@ public class RainOfFaithHandler : MonoBehaviour, SkillHandlerInterface
 			// 플레이어 스프라이트
 			Sprite playerSprite = (playerSpriteRenderer != null) ? playerSpriteRenderer.sprite : null;
 			
+			// 플레이어 애니메이터 컨트롤러
+			RuntimeAnimatorController animatorController = (playerAnimator != null) ? playerAnimator.runtimeAnimatorController : null;
+			
 			// 초기화 (비활성 상태로)
 			// ⭐ 스킬 슬롯 타입 전달 (용기 시스템용)
+			// ⭐ 애니메이터 컨트롤러 전달 (Attack2 애니메이션용)
+			// ⭐ 효과음 전달 (돌진, 참격)
 			SkillSlotType? slotType = skillSlot != null ? skillSlot.SlotType : null;
-			afterimage.SetupAsInactive(finalDamage, isInSRankMode, playerSprite, slotType);
+			afterimage.SetupAsInactive(finalDamage, isInSRankMode, playerSprite, slotType, animatorController, afterimageRushSound, afterimageSlashSound);
 			
 			installedAfterimages.Add(afterimageObj);
 			

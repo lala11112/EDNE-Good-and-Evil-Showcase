@@ -39,8 +39,11 @@ public class PlayerStatusUI : MonoBehaviour
 	#region UI 컴포넌트 - 용기 시스템
 	
 	[Header("용기 시스템 UI")]
-	[Tooltip("랭크 및 용기 점수 표시 텍스트 (Rank : (현재랭크) 용기점수 Score : (용기점수))")]
-	[SerializeField] private TextMeshProUGUI courageStatusText;
+	[Tooltip("현재 랭크 표시 텍스트 (S, A, B, C, D)")]
+	[SerializeField] private TextMeshProUGUI rankText;
+	
+	[Tooltip("용기 점수 원형 슬라이더 (360도 Filled Image)")]
+	[SerializeField] private Image courageCircleImage;
 	
 	#endregion
 	
@@ -63,6 +66,22 @@ public class PlayerStatusUI : MonoBehaviour
 	[Tooltip("정신력이 부족할 때 색상 (30% 이하)")]
 	[SerializeField] private Color mentalPowerLowColor = new Color(0.6f, 0.3f, 1f); // 보라색
 	
+	[Header("용기 랭크별 색상")]
+	[Tooltip("S랭크 색상 (금색)")]
+	[SerializeField] private Color rankSColor = new Color(1f, 0.84f, 0f); // 금색
+	
+	[Tooltip("A랭크 색상 (빨간색)")]
+	[SerializeField] private Color rankAColor = new Color(1f, 0.2f, 0.2f); // 빨간색
+	
+	[Tooltip("B랭크 색상 (주황색)")]
+	[SerializeField] private Color rankBColor = new Color(1f, 0.65f, 0f); // 주황색
+	
+	[Tooltip("C랭크 색상 (녹색)")]
+	[SerializeField] private Color rankCColor = new Color(0.2f, 1f, 0.2f); // 녹색
+	
+	[Tooltip("D랭크 색상 (회색)")]
+	[SerializeField] private Color rankDColor = new Color(0.5f, 0.5f, 0.5f); // 회색
+	
 	#endregion
 	
 	#region 애니메이션 설정
@@ -84,6 +103,7 @@ public class PlayerStatusUI : MonoBehaviour
 	// 슬라이더 애니메이션용 목표값
 	private float targetHealthValue;
 	private float targetMentalPowerValue;
+	private float targetCourageFillAmount; // 용기 원형 슬라이더 목표값
 	
 	// 텍스트 깜빡임 타이머
 	private float healthBlinkTimer;
@@ -113,6 +133,7 @@ public class PlayerStatusUI : MonoBehaviour
 		// 옵저버 패턴: 이벤트 구독
 		PlayerStatusEvents.OnHealthChanged += OnHealthChanged;
 		PlayerStatusEvents.OnMentalPowerChanged += OnMentalPowerChanged;
+		PlayerStatusEvents.OnCourageChanged += OnCourageChanged;
 		
 		// PlayerController에서 현재 상태 가져오기
 		RefreshFromPlayer();
@@ -126,6 +147,7 @@ public class PlayerStatusUI : MonoBehaviour
 		// 옵저버 패턴: 이벤트 구독 해제 (메모리 누수 방지)
 		PlayerStatusEvents.OnHealthChanged -= OnHealthChanged;
 		PlayerStatusEvents.OnMentalPowerChanged -= OnMentalPowerChanged;
+		PlayerStatusEvents.OnCourageChanged -= OnCourageChanged;
 	}
 	
 	/// <summary>
@@ -139,8 +161,7 @@ public class PlayerStatusUI : MonoBehaviour
 		// 텍스트 깜빡임 효과
 		UpdateTextBlink(Time.deltaTime);
 		
-		// 용기 시스템 UI 업데이트
-		UpdateCourageStatus();
+		// ⭐ 용기 시스템은 이벤트 기반으로 업데이트되므로 Update에서 호출 불필요
 	}
 	
 	#endregion
@@ -163,6 +184,12 @@ public class PlayerStatusUI : MonoBehaviour
 		
 		if (mentalPowerText == null)
 			Debug.LogWarning("[PlayerStatusUI] 정신력 텍스트가 할당되지 않았습니다.");
+		
+		if (rankText == null)
+			Debug.LogWarning("[PlayerStatusUI] 랭크 텍스트가 할당되지 않았습니다.");
+		
+		if (courageCircleImage == null)
+			Debug.LogError("[PlayerStatusUI] 용기 원형 슬라이더 이미지가 할당되지 않았습니다!");
 		
 		// Fill Image 자동 할당 시도
 		if (healthFillImage == null && healthSlider != null)
@@ -199,6 +226,7 @@ public class PlayerStatusUI : MonoBehaviour
 		// 목표값 초기화
 		targetHealthValue = 1f;
 		targetMentalPowerValue = 1f;
+		targetCourageFillAmount = 0f; // 용기 슬라이더 목표값 초기화
 		
 		// 색상 초기화
 		if (healthFillImage != null)
@@ -206,6 +234,23 @@ public class PlayerStatusUI : MonoBehaviour
 		
 		if (mentalPowerFillImage != null)
 			mentalPowerFillImage.color = mentalPowerColor;
+		
+		// 용기 원형 이미지 초기화
+		if (courageCircleImage != null)
+		{
+			courageCircleImage.type = Image.Type.Filled;
+			courageCircleImage.fillMethod = Image.FillMethod.Radial360;
+			courageCircleImage.fillOrigin = (int)Image.Origin360.Top; // 12시 방향부터 시작
+			courageCircleImage.fillClockwise = true; // 시계 방향으로 채우기
+			courageCircleImage.fillAmount = 0f; // 초기값 0%
+		}
+		
+		// 랭크 텍스트 초기화
+		if (rankText != null)
+		{
+			rankText.text = "D"; // 기본 랭크
+			rankText.color = rankDColor; // D랭크 색상
+		}
 	}
 	
 	/// <summary>
@@ -221,8 +266,8 @@ public class PlayerStatusUI : MonoBehaviour
 			// 정신력 갱신
 			OnMentalPowerChanged(PlayerController.Instance.CurrentMentalPower, PlayerController.Instance.MaxMentalPower);
 			
-			// 용기 시스템 갱신
-			UpdateCourageStatus();
+			// 용기 시스템 갱신 (이벤트 핸들러 직접 호출)
+			OnCourageChanged(PlayerController.Instance.CourageScore, PlayerController.Instance.CurrentCourageState);
 		}
 	}
 	
@@ -296,6 +341,48 @@ public class PlayerStatusUI : MonoBehaviour
 		}
 	}
 	
+	/// <summary>
+	/// 용기 점수 변경 이벤트 처리
+	/// PlayerStatusEvents.OnCourageChanged에서 호출됨
+	/// </summary>
+	/// <param name="courageScore">현재 용기 점수</param>
+	/// <param name="courageState">현재 용기 단계</param>
+	private void OnCourageChanged(int courageScore, CourageState courageState)
+	{
+		if (rankText == null || courageCircleImage == null) return;
+		
+		if (PlayerController.Instance == null || PlayerController.Instance.PlayerData == null)
+		{
+			// PlayerController가 없으면 기본값 표시
+			rankText.text = "D";
+			rankText.color = rankDColor;
+			targetCourageFillAmount = 0f; // 목표값 설정
+			courageCircleImage.color = rankDColor;
+			return;
+		}
+		
+		// 현재 스킬 랭크 가져오기
+		SkillRank currentRank = PlayerController.Instance.CurrentSkillRank;
+		
+		// 현재 랭크 텍스트 업데이트
+		rankText.text = currentRank.ToString();
+		
+		// 랭크별 색상 가져오기
+		Color rankColor = GetRankColor(currentRank);
+		rankText.color = rankColor;
+		courageCircleImage.color = rankColor;
+		
+		// 다음 랭크까지의 진행률 계산
+		float progressToNextRank = CalculateProgressToNextRank(courageScore, currentRank);
+		
+		// ⭐ 원형 슬라이더 목표값 설정 (애니메이션으로 부드럽게 전환)
+		targetCourageFillAmount = progressToNextRank;
+		
+#if UNITY_EDITOR
+		Debug.Log($"[PlayerStatusUI] 용기 UI 업데이트: 랭크 {currentRank}, 점수 {courageScore}, 진행률 {progressToNextRank * 100:F1}%");
+#endif
+	}
+	
 	#endregion
 	
 	#region 애니메이션
@@ -319,6 +406,14 @@ public class PlayerStatusUI : MonoBehaviour
 			float currentValue = mentalPowerSlider.value;
 			float newValue = Mathf.Lerp(currentValue, targetMentalPowerValue, Time.deltaTime * sliderAnimationSpeed);
 			mentalPowerSlider.value = newValue;
+		}
+		
+		// 용기 원형 슬라이더 애니메이션
+		if (courageCircleImage != null)
+		{
+			float currentValue = courageCircleImage.fillAmount;
+			float newValue = Mathf.Lerp(currentValue, targetCourageFillAmount, Time.deltaTime * sliderAnimationSpeed);
+			courageCircleImage.fillAmount = newValue;
 		}
 	}
 	
@@ -434,27 +529,112 @@ public class PlayerStatusUI : MonoBehaviour
 	
 	#endregion
 	
-	#region 용기 시스템 UI
+	#region 용기 시스템 UI (헬퍼 메서드)
 	
 	/// <summary>
-	/// 용기 시스템 상태 업데이트 (랭크 및 용기 점수)
+	/// 현재 랭크에 따른 색상 반환
 	/// </summary>
-	private void UpdateCourageStatus()
+	/// <param name="rank">현재 스킬 랭크</param>
+	/// <returns>해당 랭크의 색상</returns>
+	private Color GetRankColor(SkillRank rank)
 	{
-		if (courageStatusText == null) return;
-		
-		if (PlayerController.Instance != null)
+		switch (rank)
 		{
-			SkillRank currentRank = PlayerController.Instance.CurrentSkillRank;
-			int courageScore = PlayerController.Instance.CourageScore;
-			
-			// 텍스트 업데이트: "Rank : (현재랭크) 용기점수 Score : (용기점수)"
-			courageStatusText.text = $"Skill Rank : {currentRank}    brave Score : {courageScore}";
+			case SkillRank.S:
+				return rankSColor;
+			case SkillRank.A:
+				return rankAColor;
+			case SkillRank.B:
+				return rankBColor;
+			case SkillRank.C:
+				return rankCColor;
+			case SkillRank.D:
+			default:
+				return rankDColor;
 		}
-		else
+	}
+	
+	/// <summary>
+	/// 다음 랭크까지의 진행률 계산 (0~1 범위)
+	/// </summary>
+	/// <param name="currentScore">현재 용기 점수</param>
+	/// <param name="currentRank">현재 스킬 랭크</param>
+	/// <returns>다음 랭크까지의 진행률 (0~1)</returns>
+	private float CalculateProgressToNextRank(int currentScore, SkillRank currentRank)
+	{
+		if (PlayerController.Instance == null || PlayerController.Instance.PlayerData == null)
+			return 0f;
+		
+		PlayerDataSO playerData = PlayerController.Instance.PlayerData;
+		
+		// 현재 랭크의 시작 점수와 다음 랭크의 요구 점수 가져오기
+		int currentRankStartScore = GetRankStartScore(currentRank, playerData);
+		int nextRankRequiredScore = GetNextRankRequiredScore(currentRank, playerData);
+		
+		// S랭크는 최대 랭크이므로 진행률 100%로 고정
+		if (currentRank == SkillRank.S)
 		{
-			// PlayerController가 없으면 기본값 표시
-			courageStatusText.text = "Rank : - 용기점수 Score : -";
+			return 1f;
+		}
+		
+		// 진행률 계산: (현재 점수 - 현재 랭크 시작 점수) / (다음 랭크 요구 점수 - 현재 랭크 시작 점수)
+		int scoreInCurrentRank = currentScore - currentRankStartScore;
+		int scoreRangeForRank = nextRankRequiredScore - currentRankStartScore;
+		
+		if (scoreRangeForRank <= 0)
+			return 1f; // 분모가 0이면 100%로 처리
+		
+		float progress = (float)scoreInCurrentRank / scoreRangeForRank;
+		
+		// 0~1 범위로 제한
+		return Mathf.Clamp01(progress);
+	}
+	
+	/// <summary>
+	/// 현재 랭크의 시작 점수 가져오기
+	/// </summary>
+	/// <param name="rank">현재 스킬 랭크</param>
+	/// <param name="playerData">플레이어 데이터 SO</param>
+	/// <returns>현재 랭크 시작 점수</returns>
+	private int GetRankStartScore(SkillRank rank, PlayerDataSO playerData)
+	{
+		switch (rank)
+		{
+			case SkillRank.S:
+				return playerData.confidenceStepRequirement; // S랭크 시작 점수 (Confidence)
+			case SkillRank.A:
+				return playerData.determinationStepRequirement; // A랭크 시작 점수 (Determination)
+			case SkillRank.B:
+				return playerData.courageStepRequirement; // B랭크 시작 점수 (Courage)
+			case SkillRank.C:
+				return playerData.doubtStepRequirement; // C랭크 시작 점수 (Doubt)
+			case SkillRank.D:
+			default:
+				return playerData.anxietyStepRequirement; // D랭크 시작 점수 (Anxiety)
+		}
+	}
+	
+	/// <summary>
+	/// 다음 랭크의 요구 점수 가져오기
+	/// </summary>
+	/// <param name="rank">현재 스킬 랭크</param>
+	/// <param name="playerData">플레이어 데이터 SO</param>
+	/// <returns>다음 랭크 요구 점수</returns>
+	private int GetNextRankRequiredScore(SkillRank rank, PlayerDataSO playerData)
+	{
+		switch (rank)
+		{
+			case SkillRank.S:
+				return playerData.confidenceStepRequirement; // S랭크는 최대이므로 자기 자신 반환
+			case SkillRank.A:
+				return playerData.confidenceStepRequirement; // A→S (Confidence)
+			case SkillRank.B:
+				return playerData.determinationStepRequirement; // B→A (Determination)
+			case SkillRank.C:
+				return playerData.courageStepRequirement; // C→B (Courage)
+			case SkillRank.D:
+			default:
+				return playerData.doubtStepRequirement; // D→C (Doubt)
 		}
 	}
 	

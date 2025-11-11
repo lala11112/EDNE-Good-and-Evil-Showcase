@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Com.LuisPedroFonseca.ProCamera2D;
 
 /// <summary>
 /// 신념질주 스킬 핸들러
@@ -189,6 +190,32 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 	
 	#endregion
 	
+	#region 카메라 쉐이크
+	
+	[Header("카메라 쉐이크")]
+	[Tooltip("ProCamera2DShake 컴포넌트 (카메라에 부착됨)")]
+	[SerializeField] private ProCamera2DShake camShake;
+	
+	[Tooltip("수리검 발사 시 카메라 쉐이크 강도 (좌우, 상하)")]
+	[SerializeField] private Vector2 shurikenShakeStrength = new Vector2(0.2f, 0.2f);
+	
+	[Tooltip("수리검 발사 시 카메라 쉐이크 지속 시간 (초)")]
+	[SerializeField] private float shurikenShakeDuration = 0.15f;
+	
+	[Tooltip("돌진 시 카메라 쉐이크 강도 (좌우, 상하)")]
+	[SerializeField] private Vector2 dashShakeStrength = new Vector2(0.7f, 0.7f);
+	
+	[Tooltip("돌진 시 카메라 쉐이크 지속 시간 (초)")]
+	[SerializeField] private float dashShakeDuration = 0.25f;
+	
+	[Tooltip("카메라 쉐이크 진동 횟수")]
+	[SerializeField] private int shakeVibrato = 30;
+	
+	[Tooltip("카메라 쉐이크 무작위성 (0~1)")]
+	[SerializeField] private float shakeRandomness = 0.5f;
+	
+	#endregion
+	
 	#region 코루틴 참조
 	
 	private Coroutine rechargeCoroutine;
@@ -223,6 +250,16 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		
 		// SkillSlot 찾기 (쿨타임 제어용)
 		skillSlot = GetComponentInParent<SkillSlot>();
+		
+		// ProCamera2DShake 컴포넌트 찾기 (Inspector에서 할당되지 않은 경우)
+		if (camShake == null)
+		{
+			camShake = FindObjectOfType<ProCamera2DShake>();
+			if (camShake == null)
+			{
+				Debug.LogWarning("[FaithDashHandler] ProCamera2DShake 컴포넌트를 찾을 수 없습니다. 카메라 쉐이크가 작동하지 않습니다.");
+			}
+		}
 	}
 	
 	/// <summary>
@@ -336,6 +373,13 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			playerController.PlayAttackAnimation(3);
 			Debug.Log("[FaithDashHandler] 수리검 발사 애니메이션 재생 (Attack2)");
+		}
+		
+		// ⭐ 카메라 쉐이크 (작은 효과 - 수리검 발사)
+		if (camShake != null)
+		{
+			camShake.Shake(shurikenShakeDuration, shurikenShakeStrength, shakeVibrato, shakeRandomness);
+			Debug.Log($"[FaithDashHandler] 📷 수리검 발사 카메라 쉐이크!");
 		}
 		
 		// 수리검 발사 효과음 재생
@@ -741,6 +785,13 @@ public class FaithDashHandler : MonoBehaviour, SkillHandlerInterface
 		{
 			playerController.PlayAttackAnimation(4);
 			Debug.Log("[FaithDashHandler] 돌진 애니메이션 재생 시작 (Attack3)");
+		}
+		
+		// ⭐ 카메라 쉐이크 (큰 효과 - 돌진)
+		if (camShake != null)
+		{
+			camShake.Shake(dashShakeDuration, dashShakeStrength, shakeVibrato, shakeRandomness);
+			Debug.Log($"[FaithDashHandler] 📷 돌진 카메라 쉐이크!");
 		}
 		
 		// 돌진 효과음 재생
