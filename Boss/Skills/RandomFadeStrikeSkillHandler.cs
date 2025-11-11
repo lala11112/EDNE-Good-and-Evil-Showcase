@@ -68,6 +68,10 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("히트 VFX 프리팹의 파티클이 부모/트랜스폼 스케일을 따르도록 강제")]
 	[SerializeField] private bool forceHitVFXHierarchyScaling = true;
 
+	[Header("동시 발동 설정")]
+	[Tooltip("한 번에 최대 몇 개의 타겟을 동시에 전환/타격할지 (1 이상)")]
+	[SerializeField] private int maxSimultaneousStrikes = 2;
+
     // 비주얼 관련 복잡 옵션 제거 (고정 색 사용)
 
     [Header("초기화 설정")]
@@ -147,9 +151,9 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
             yield break;
         }
 
-        // 1~2개 무작위 선택 (최대 2개)
-        int maxSelectable = Mathf.Min(2, candidates.Count);
-        int selectCount = Mathf.Clamp(Random.Range(1, 3), 1, maxSelectable);
+		// 1 ~ maxSimultaneousStrikes 사이에서 무작위 선택 (후보 수로 클램프)
+		int maxSelectable = Mathf.Min(Mathf.Max(1, maxSimultaneousStrikes), candidates.Count);
+		int selectCount = Random.Range(1, maxSelectable + 1); // int 범위는 상한 배타 → +1
         List<GameObject> pool = new List<GameObject>(candidates);
         List<GameObject> picked = new List<GameObject>(selectCount);
         for (int i = 0; i < selectCount; i++)
