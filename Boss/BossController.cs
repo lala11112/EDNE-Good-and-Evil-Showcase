@@ -115,8 +115,28 @@ public partial class BossController : EntityController
 				OnDamaged(actualDamage, damageSource);
 			}
 
-			// 즉시 페이즈 스킬 발동 (발동 중 무적은 트리거 옵션으로 제어)
-			UsePhaseSkill(selectedIndex);
+            // 즉시 페이즈 스킬 발동 전에 반복 셋업 (Skill 파트의 러untime 필드 사용)
+            if (phaseTriggers != null && selectedIndex >= 0 && selectedIndex < phaseTriggers.Length)
+            {
+                int minUses = Mathf.Max(1, phaseTriggers[selectedIndex].minRepeatUses);
+                int maxUses = Mathf.Max(minUses, phaseTriggers[selectedIndex].maxRepeatUses);
+                if (phaseRepeatRemaining != null && (phaseRepeatRemaining.Length <= selectedIndex || phaseRepeatRemaining[selectedIndex] <= 0))
+                {
+                    // 배열 길이는 초기화 시 생성됨. 방어적으로 길이 체크 후 셋업
+                    if (phaseRepeatRemaining != null && selectedIndex < phaseRepeatRemaining.Length)
+                    {
+                        phaseRepeatRemaining[selectedIndex] = Random.Range(minUses, maxUses + 1);
+                    }
+                }
+                // 반복 루프 시작 인덱스 설정
+                if (currentRepeatingPhaseIndex == -1)
+                {
+                    currentRepeatingPhaseIndex = selectedIndex;
+                }
+            }
+
+            // 페이즈 스킬 발동 (무적/스케줄은 Skill 파트에서 처리)
+            UsePhaseSkill(selectedIndex);
 			return true;
 		}
 

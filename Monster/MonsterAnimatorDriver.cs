@@ -165,6 +165,7 @@ public class MonsterAnimatorDriver : MonoBehaviour
         animator.SetFloat(paramInputX, dir.x);
         animator.SetFloat(paramInputY, dir.y);
         animator.SetTrigger(paramAttackTrigger);
+		Debug.Log("Attack트리거 호출됨!", this);
     }
 
     public void TriggerDeath(Vector2? facingDirection = null)
@@ -176,5 +177,6 @@ public class MonsterAnimatorDriver : MonoBehaviour
         animator.SetFloat(paramInputY, dir.y);
         animator.SetBool(paramIsDead, true);
         animator.SetTrigger(paramDeathTrigger);
+		Debug.Log("Death 트리거 호출됨!", this);
     }
 }

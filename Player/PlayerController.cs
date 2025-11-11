@@ -1464,10 +1464,17 @@ public class PlayerController : EntityController
 	/// </summary>
 	public void SetCurrentRoomController(RoomController roomController)
 	{
-		// 방 클리어 시 기록 초기화
+		// ⭐ 방 진입 시 항상 초기화 (이전 방이 있으면 클리어 처리, 없으면 첫 진입 처리)
+		// 방에 처음 들어가거나 다른 방으로 이동할 때 모두 초기화 필요
 		if (currentRoomController != null && roomController != currentRoomController)
 		{
+			// 이전 방이 있고 다른 방으로 이동하는 경우
 			OnRoomCleared();
+		}
+		else if (currentRoomController == null && roomController != null)
+		{
+			// 방에 처음 들어가는 경우 (게임 시작 후 첫 방 진입)
+			OnRoomEntered();
 		}
 
 		currentRoomController = roomController;
@@ -1484,6 +1491,7 @@ public class PlayerController : EntityController
 			lastHitTime = currentTime;
 			
 			// ⭐ 전투 없음 페널티 타이머 초기화 (방 진입 시점부터 카운트 시작)
+			// 이 시점에서 초기화하여 SO 데이터의 noCombatJudgmentDuration 시간이 지난 후에만 페널티 적용
 			lastCombatActionTime = currentTime;
 			
 			// ⭐ 누적량 초기화 (방 진입 시 리셋)
@@ -1505,6 +1513,7 @@ public class PlayerController : EntityController
 
 	/// <summary>
 	/// 방 클리어 시 용기 시스템 초기화
+	/// 이전 방을 클리어하고 다른 방으로 이동할 때 호출
 	/// </summary>
 	private void OnRoomCleared()
 	{
@@ -1534,6 +1543,41 @@ public class PlayerController : EntityController
 
 #if UNITY_EDITOR
 		Debug.Log("[PlayerController] 방 클리어 - 용기 시스템 기록 초기화 (누적량, 전투 상태, 무피해 정신력 회복 포함)");
+#endif
+	}
+
+	/// <summary>
+	/// 방 진입 시 용기 시스템 초기화
+	/// 게임 시작 후 첫 방 진입 시 호출 (이전 방이 없을 때)
+	/// </summary>
+	private void OnRoomEntered()
+	{
+		// 기록 초기화
+		recentKillRecords.Clear();
+		recentSkillUseRecords.Clear();
+		recentMultiKillRecords.Clear();
+		recentHitTimes.Clear();
+
+		// 타이머 초기화 (현재 시간으로 설정하여 방 진입 시점부터 카운트 시작)
+		float currentTime = Time.time;
+		lastCombatActionTime = currentTime;
+		lastHitTime = currentTime; // 방 진입 시점 기준으로 무피해 보너스 계산
+
+		// 누적량 초기화
+		accumulatedNoCombatLoss = 0f;
+		accumulatedNoDamageGain = 0f;
+		accumulatedRegen = 0f; // 정신력 회복 누적량 초기화
+
+		// ⭐ 무피해 정신력 회복 시스템 초기화
+		hasDealtDamageInRoom = false;
+		roomNoDamageStartTime = 0f;
+
+		// 전투 상태 초기화
+		isInCombat = false;
+		combatEndTime = 0f;
+
+#if UNITY_EDITOR
+		Debug.Log("[PlayerController] 방 진입 - 용기 시스템 기록 초기화 (첫 방 진입, 누적량, 전투 상태, 무피해 정신력 회복 포함)");
 #endif
 	}
 
@@ -1763,9 +1807,17 @@ public class PlayerController : EntityController
 
 	/// <summary>
 	/// 이동 입력 업데이트
+	/// 다이얼로그 중에는 입력을 받지 않습니다
 	/// </summary>
 	private void UpdateMovementInput()
 	{
+		// 다이얼로그가 진행 중이면 이동 입력을 받지 않음
+		if (DialogueInputHandler.IsDialogueActive)
+		{
+			moveInput = Vector2.zero;
+			return;
+		}
+		
 		if (moveAction != null)
 		{
 			moveInput = moveAction.ReadValue<Vector2>();

@@ -25,18 +25,50 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
     [Tooltip("이름 검색을 씬 전체로 확장합니다. 끄면 이 핸들러의 루트(씬 루트) 기준으로만 검색합니다.")]
     [SerializeField] private bool searchWholeScene = false;
 
-    [Header("페이드 타이밍 (초)")]
-    [SerializeField] private float fadeInDuration = 0.8f;
-    [SerializeField] private float holdAtPeakDuration = 0.0f;
-    [SerializeField] private float fadeOutDuration = 0.5f;
+    // 타이밍/페이드 관련 복잡 옵션 제거 (요구사항: 2초 노랑 → 즉시 빨강 후 알파 0)
+    [Header("경고/전환 타이밍 (인스펙터 설정)")]
+    [Tooltip("노란색 경고 유지 시간(초)")]
+    [SerializeField] private float warningHoldSeconds = 2f;
+    [Tooltip("빨간색 유지 시간(초) - 데미지 적용 후")]
+    [SerializeField] private float redHoldSeconds = 1f;
+	[Tooltip("빨간 전환 시 알파(투명도) 값 (0~1)")]
+	[Range(0f, 1f)]
+	[SerializeField] private float redAlpha = 1f;
 
     [Header("피해 설정")]
     private int damageAmount = 0; // MonsterSkillData.damage에서 세팅
+    [Tooltip("피해를 줄 대상 레이어 마스크 (플레이어/동맹 등 대상 선택)")]
     [SerializeField] private LayerMask damageLayerMask;
 
-    [Header("비주얼")]
-    [Tooltip("페이드 동안 적용할 색상 (빨간색 권장)")]
-    [SerializeField] private Color effectTintColor = new Color(1f, 0f, 0f, 1f);
+	[Header("히트 VFX (빨간 전환 시 대체 연출)")]
+	[Tooltip("빨간색 전환 대신 히트 VFX 프리팹을 사용합니다")]
+	[SerializeField] private bool useHitVFX = false;
+	[Tooltip("히트 시 표시할 VFX 프리팹 (콜라이더 크기에 맞춰 스케일)")]
+	[SerializeField] private GameObject hitVFXPrefab;
+	[Tooltip("프리팹이 Scale=1일 때의 로컬 기준 크기 (가로, 세로). 콜라이더 크기를 이 값으로 나눠 최종 스케일 계산")]
+	[SerializeField] private Vector2 hitVFXUnitLocalSize = new Vector2(1f, 1f);
+	[Tooltip("원형 콜라이더는 균등 스케일(가로=세로)을 강제합니다")]
+	[SerializeField] private bool hitUniformScaleForCircle = true;
+	[Tooltip("CircleCollider2D 매칭 시 지름에 곱할 배수 (1=동일)")]
+	[SerializeField] private float hitCircleScaleMultiplier = 1f;
+	[Tooltip("CircleCollider2D 매칭 시 추가 패딩(월드 유닛, 양쪽 합산)")]
+	[SerializeField] private float hitCirclePadding = 0f;
+	[Tooltip("BoxCollider2D 매칭 시 가로/세로 배수 (1=동일)")]
+	[SerializeField] private Vector2 hitBoxScaleMultiplier = Vector2.one;
+	[Tooltip("BoxCollider2D 매칭 시 가로/세로 패딩(월드 유닛, 양쪽 합산)")]
+	[SerializeField] private Vector2 hitBoxPadding = Vector2.zero;
+	[Tooltip("BoxCollider2D일 때 넓이(가로*세로) 기반 '균등 스케일'을 사용합니다")]
+	[SerializeField] private bool hitBoxUseAreaScale = false;
+	[Tooltip("넓이 기반 배수. 1=같은 넓이, 2=두 배 넓이")]
+	[SerializeField] private float hitBoxAreaScaleMultiplier = 1f;
+	[Tooltip("히트 VFX 유지 시간(초). 음수이면 redHoldSeconds를 사용")]
+	[SerializeField] private float hitVFXLifetime = -1f;
+	[Tooltip("최종 로컬 스케일에 추가 곱하는 전역 배수 (선형). 2=두 배")]
+	[SerializeField] private float hitVFXGlobalScale = 1f;
+	[Tooltip("히트 VFX 프리팹의 파티클이 부모/트랜스폼 스케일을 따르도록 강제")]
+	[SerializeField] private bool forceHitVFXHierarchyScaling = true;
+
+    // 비주얼 관련 복잡 옵션 제거 (고정 색 사용)
 
     [Header("초기화 설정")]
     [Tooltip("시작 시 모든 타겟의 알파를 0으로 강제 설정합니다.")]
@@ -157,31 +189,206 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
             yield break;
         }
 
-        Color[] originalColors = new Color[spriteRenderers.Length];
+        // 원본 복원/프리페이드 제거: 요구사항에 따라 즉시 노랑 표시
+
+		// 단순 색 전환: 반투명 노랑(2초) → 즉시 빨강 (알파 조절 가능)
+        Color preColor = new Color(1f, 0.92f, 0.16f, 0.5f);    // 노랑, α=0.5
+		Color postColor = new Color(1f, 0f, 0f, Mathf.Clamp01(redAlpha)); // 빨강, α=redAlpha
         for (int i = 0; i < spriteRenderers.Length; i++)
         {
-            originalColors[i] = spriteRenderers[i].color;
-            SetColorAlpha(spriteRenderers[i], effectTintColor, 0f);
+            spriteRenderers[i].enabled = true;
+            spriteRenderers[i].color = preColor; // 데미지 없음
         }
-
-        yield return FadeSpritesTinted(spriteRenderers, 0f, 1f, Mathf.Max(0f, fadeInDuration), effectTintColor);
-
-        if (holdAtPeakDuration > 0f)
+        // 외부 스크립트가 색/알파를 덮어쓰는 경우를 대비해 매 프레임 고정 적용
+        float preElapsed = 0f;
+        while (preElapsed < warningHoldSeconds)
         {
-            yield return new WaitForSeconds(holdAtPeakDuration);
+            for (int i = 0; i < spriteRenderers.Length; i++)
+            {
+                spriteRenderers[i].color = preColor;
+            }
+            preElapsed += Time.deltaTime;
+            yield return null;
         }
+
+		// 빨간 전환: 항상 먼저 스프라이트를 빨간색으로 전환하여 '전환 시점'을 명확히 표시
+		for (int i = 0; i < spriteRenderers.Length; i++)
+		{
+			spriteRenderers[i].color = postColor; // 전환과 동시에 타격
+		}
+		// 필요 시 동일 프레임에 히트 VFX도 함께 출력
+		if (useHitVFX && hitVFXPrefab != null)
+		{
+			SpawnHitVFXForColliders(selected);
+		}
 
         ApplyDamageOnColliders(selected);
 
-        yield return FadeSpritesTinted(spriteRenderers, 1f, 0f, Mathf.Max(0f, fadeOutDuration), effectTintColor);
+		// 유지 시간: VFX 사용 시에는 hitVFXLifetime, 아니면 redHoldSeconds
+		float hold = useHitVFX && hitVFXPrefab != null
+			? (hitVFXLifetime >= 0f ? hitVFXLifetime : redHoldSeconds)
+			: redHoldSeconds;
+		if (hold > 0f)
+        {
+			yield return new WaitForSeconds(hold);
+        }
 
+        // 전환과 동시에 타격 이후 즉시 알파 0
         for (int i = 0; i < spriteRenderers.Length; i++)
         {
-            SetColorAlpha(spriteRenderers[i], originalColors[i], 0f);
+            SetAlpha(spriteRenderers[i], 0f);
         }
 
         onDone?.Invoke();
     }
+
+	private void SpawnHitVFXForColliders(GameObject targetRoot)
+	{
+		if (targetRoot == null || hitVFXPrefab == null) return;
+		var colliders = targetRoot.GetComponentsInChildren<Collider2D>(true);
+		if (colliders == null || colliders.Length == 0) return;
+
+		for (int i = 0; i < colliders.Length; i++)
+		{
+			var col = colliders[i];
+			if (col == null || !col.enabled) continue;
+			SpawnHitVFXForCollider(col, targetRoot.transform);
+		}
+	}
+
+	private void SpawnHitVFXForCollider(Collider2D col, Transform parentForVFX)
+	{
+		if (col == null || hitVFXPrefab == null) return;
+
+		Bounds b = col.bounds; // 월드 공간 AABB
+		Vector2 desiredWorldSize = new Vector2(b.size.x, b.size.y); // 기본값
+
+		// Circle은 지름 배수/패딩 적용
+		if (col is CircleCollider2D cc)
+		{
+			float d = Mathf.Max(b.size.x, b.size.y);
+			d = (d * Mathf.Max(0.001f, hitCircleScaleMultiplier)) + Mathf.Max(0f, hitCirclePadding);
+			desiredWorldSize = new Vector2(d, d);
+		}
+		// Box는 로컬 사이즈와 로컬 스케일을 사용해 보다 정확한 월드 크기 계산
+		else if (col is BoxCollider2D bc)
+		{
+			Vector2 localSize = bc.size;
+			Vector3 lossy = col.transform.lossyScale;
+			float worldX = Mathf.Abs(localSize.x * (Mathf.Approximately(lossy.x, 0f) ? 1f : lossy.x));
+			float worldY = Mathf.Abs(localSize.y * (Mathf.Approximately(lossy.y, 0f) ? 1f : lossy.y));
+			// 배수/패딩 적용
+			worldX = worldX * Mathf.Max(0.001f, hitBoxScaleMultiplier.x) + Mathf.Max(0f, hitBoxPadding.x);
+			worldY = worldY * Mathf.Max(0.001f, hitBoxScaleMultiplier.y) + Mathf.Max(0f, hitBoxPadding.y);
+			desiredWorldSize = new Vector2(worldX, worldY);
+		}
+
+		// 인스턴스 생성 (월드 위치/회전 유지)
+		GameObject vfx = Object.Instantiate(hitVFXPrefab);
+		vfx.transform.position = b.center;
+		vfx.transform.rotation = col.transform.rotation;
+		vfx.transform.localScale = Vector3.one;
+
+		// 부모 설정 (월드 트랜스폼 유지)
+		if (parentForVFX != null)
+		{
+			vfx.transform.SetParent(parentForVFX, true);
+		}
+
+		// 로컬 스케일 계산
+		float unitX = Mathf.Max(0.001f, hitVFXUnitLocalSize.x);
+		float unitY = Mathf.Max(0.001f, hitVFXUnitLocalSize.y);
+		Vector3 parentLossy = vfx.transform.parent != null ? vfx.transform.parent.lossyScale : Vector3.one;
+		float lx = Mathf.Approximately(parentLossy.x, 0f) ? 1f : parentLossy.x;
+		float ly = Mathf.Approximately(parentLossy.y, 0f) ? 1f : parentLossy.y;
+
+		// 1) Box + 넓이 기반 균등 스케일
+		if (col is BoxCollider2D && hitBoxUseAreaScale)
+		{
+			// 목표 넓이 = (보정된 worldX * worldY) * 배수
+			float targetArea = Mathf.Max(0.000001f, desiredWorldSize.x * desiredWorldSize.y) * Mathf.Max(0.001f, hitBoxAreaScaleMultiplier);
+			// 월드 넓이 = (sLocal^2) * unitX*unitY * (lx*ly)
+			float denom = Mathf.Max(0.000001f, unitX * unitY * lx * ly);
+			float sLocal = Mathf.Sqrt(targetArea / denom);
+			vfx.transform.localScale = new Vector3(sLocal, sLocal, 1f);
+		}
+		// 2) Circle + 균등 강제
+		else if (col is CircleCollider2D && hitUniformScaleForCircle)
+		{
+			float sxWorld = desiredWorldSize.x / unitX;
+			float syWorld = desiredWorldSize.y / unitY;
+			float sWorld = Mathf.Max(sxWorld, syWorld);
+			float sLocal = sWorld / Mathf.Max(0.0001f, Mathf.Max(lx, ly));
+			vfx.transform.localScale = new Vector3(sLocal, sLocal, 1f);
+		}
+		// 3) 기본: 비균등(가로/세로) 스케일
+		else
+		{
+			float sxWorld = desiredWorldSize.x / unitX;
+			float syWorld = desiredWorldSize.y / unitY;
+			vfx.transform.localScale = new Vector3(sxWorld / lx, syWorld / ly, 1f);
+		}
+
+		// 전역 배수 적용 (히트박스는 유지, VFX만 추가로 확대/축소)
+		float g = Mathf.Max(0.001f, hitVFXGlobalScale);
+		if (!Mathf.Approximately(g, 1f))
+		{
+			Vector3 s = vfx.transform.localScale;
+			vfx.transform.localScale = new Vector3(s.x * g, s.y * g, 1f);
+		}
+
+		// 파티클이 트랜스폼 스케일을 따르도록 보정 (선택)
+		if (forceHitVFXHierarchyScaling)
+		{
+			ConfigureHitVFXParticles(vfx);
+		}
+
+		// 수명 후 제거
+		float life = hitVFXLifetime >= 0f ? hitVFXLifetime : redHoldSeconds;
+		if (life <= 0f) life = 0.01f;
+		Object.Destroy(vfx, life);
+	}
+
+	// 히트 VFX 프리팁 내 파티클이 트랜스폼 스케일을 반영하도록 설정
+	private static void ConfigureHitVFXParticles(GameObject vfx)
+	{
+		if (vfx == null) return;
+		var pss = vfx.GetComponentsInChildren<ParticleSystem>(true);
+		for (int i = 0; i < pss.Length; i++)
+		{
+			var ps = pss[i];
+			var main = ps.main;
+			main.simulationSpace = ParticleSystemSimulationSpace.Local;
+			main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+
+			var vel = ps.velocityOverLifetime;
+			vel.space = ParticleSystemSimulationSpace.Local;
+
+			var trails = ps.trails;
+			if (trails.enabled) { trails.enabled = false; }
+
+			ps.Play(true);
+		}
+
+		var psrs = vfx.GetComponentsInChildren<ParticleSystemRenderer>(true);
+		for (int i = 0; i < psrs.Length; i++)
+		{
+			try
+			{
+				psrs[i].alignment = ParticleSystemRenderSpace.Local;
+				psrs[i].renderMode = ParticleSystemRenderMode.Billboard;
+				psrs[i].velocityScale = 0f;
+				psrs[i].lengthScale = 1f;
+				psrs[i].cameraVelocityScale = 0f;
+			}
+			catch { }
+		}
+
+		var trs = vfx.GetComponentsInChildren<TrailRenderer>(true);
+		for (int i = 0; i < trs.Length; i++) { trs[i].enabled = false; }
+		var lrs = vfx.GetComponentsInChildren<LineRenderer>(true);
+		for (int i = 0; i < lrs.Length; i++) { lrs[i].enabled = false; }
+	}
 
     private void ResolveTargetsByNames()
     {
@@ -248,66 +455,7 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
         return null;
     }
 
-    private IEnumerator FadeSprites(SpriteRenderer[] srs, float from, float to, float duration)
-    {
-        if (duration <= 0f)
-        {
-            for (int i = 0; i < srs.Length; i++)
-            {
-                SetAlpha(srs[i], to);
-            }
-            yield break;
-        }
-
-        float elapsed = 0f;
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float a = Mathf.Lerp(from, to, t);
-            for (int i = 0; i < srs.Length; i++)
-            {
-                SetAlpha(srs[i], a);
-            }
-            yield return null;
-        }
-
-        // 보정
-        for (int i = 0; i < srs.Length; i++)
-        {
-            SetAlpha(srs[i], to);
-        }
-    }
-
-    private IEnumerator FadeSpritesTinted(SpriteRenderer[] srs, float from, float to, float duration, Color tint)
-    {
-        if (duration <= 0f)
-        {
-            for (int i = 0; i < srs.Length; i++)
-            {
-                SetColorAlpha(srs[i], tint, to);
-            }
-            yield break;
-        }
-
-        float elapsed = 0f;
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float a = Mathf.Lerp(from, to, t);
-            for (int i = 0; i < srs.Length; i++)
-            {
-                SetColorAlpha(srs[i], tint, a);
-            }
-            yield return null;
-        }
-
-        for (int i = 0; i < srs.Length; i++)
-        {
-            SetColorAlpha(srs[i], tint, to);
-        }
-    }
+    // 페이드 유틸 제거 (요구사항 단순 동작만 유지)
 
     private void ApplyDamageOnColliders(GameObject targetRoot)
     {

@@ -331,6 +331,9 @@ public partial class MonsterController : EntityController
     protected override void Die()
     {
         Debug.Log("다이");
+
+		// 애니메이션: 사망 트리거 발동
+		TriggerDeathAnimation();
         
         // ⭐ 스킬로 처치된 경우 이벤트 발생 (용기 시스템용)
         // 데미지 소스에서 스킬 정보 추출
@@ -365,6 +368,30 @@ public partial class MonsterController : EntityController
         {
             navAgent.isStopped = true;
             navAgent.enabled = false;
+        }
+        
+        // ⭐ 충돌 비활성화: 사망 후 플레이어/오브젝트와 충돌하지 않도록 Collider 및 물리 비활성화
+        // 2D Collider 전부 비활성화
+        var colliders2D = GetComponentsInChildren<Collider2D>(false);
+        for (int i = 0; i < colliders2D.Length; i++)
+        {
+            colliders2D[i].enabled = false;
+        }
+        
+        // 3D Collider가 섞여 있을 경우 대비해 함께 비활성화
+        var colliders3D = GetComponentsInChildren<Collider>(false);
+        for (int i = 0; i < colliders3D.Length; i++)
+        {
+            colliders3D[i].enabled = false;
+        }
+        
+        // 물리 시뮬레이션 중지 (2D)
+        var rigidbody2D = GetComponentInChildren<Rigidbody2D>();
+        if (rigidbody2D != null)
+        {
+            rigidbody2D.linearVelocity = Vector2.zero;
+            rigidbody2D.angularVelocity = 0f;
+            rigidbody2D.simulated = false;
         }
         
         // ⭐ 죽음 이벤트 발생 (EnemyDeathEventSystem이 있다면 자동으로 감지됨)
@@ -417,6 +444,31 @@ public partial class MonsterController : EntityController
 
     // 이벤트
     public System.Action<MonsterController> OnMonsterDied;
+
+	/// <summary>
+	/// 애니메이션: 사망 트리거 실행
+	/// </summary>
+	private void TriggerDeathAnimation()
+	{
+		Debug.Log($"[MonsterController] {gameObject.name} Death animation requested");
+		var simpleDriver = GetComponentInChildren<MonsterAnimatorSimple>();
+		if (simpleDriver != null)
+		{
+			simpleDriver.TriggerDeath();
+			Debug.Log($"[MonsterController] {gameObject.name} Death via MonsterAnimatorSimple");
+			return;
+		}
+
+		var driver = GetComponentInChildren<MonsterAnimatorDriver>();
+		if (driver != null)
+		{
+			driver.TriggerDeath(null);
+			Debug.Log($"[MonsterController] {gameObject.name} Death via MonsterAnimatorDriver");
+			return;
+		}
+
+		Debug.LogWarning($"[MonsterController] {gameObject.name} Death requested but no animator driver found");
+	}
     
     /// <summary>
     /// 몬스터가 스킬로 처치되었을 때 발생하는 이벤트

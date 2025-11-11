@@ -9,9 +9,11 @@ using UnityEngine;
 public partial class BossController : EntityController
 {
 	#region Inspector - Skill Slots
-	[Header("보스 스킬 슬롯 (순차 사용)")]
-	[Tooltip("보스가 순차적으로 사용할 스킬 슬롯 목록입니다. 인덱스 순서대로 반복 실행됩니다.")]
-	[SerializeField] private BossSkillSlot[] skillSlots;
+	[SerializeField, HideInInspector] private BossSkillSlot[] skillSlots;
+
+	[Header("페이즈별 스킬 세트 (선택)")]
+	[Tooltip("페이즈별로 사용할 슬롯 세트입니다. 0=초기 페이즈, 트리거 완료 수 만큼 증가")]
+	[SerializeField] private BossPhaseSkillSet[] phaseSkillSets;
 
 	[Header("스킬 시스템 토글")]
 	[Tooltip("보스 스킬 시스템 활성/비활성")]
@@ -43,6 +45,11 @@ public partial class BossController : EntityController
 	private bool[] phaseFired;
     private float nextAnySkillAllowedAt = 0f;
     private int[] slotRepeatRemaining; // 슬롯별 남은 반복 횟수
+    private int[] phaseRepeatRemaining; // 페이즈 스킬 남은 반복 횟수
+    private int currentRepeatingPhaseIndex = -1; // 반복 중인 페이즈 인덱스 (-1이면 없음)
+    private bool isPhaseInvincibleActive = false; // 페이즈 반복 동안 무적 유지
+    private int invinciblePhaseIndex = -1; // 무적 유지중인 페이즈 인덱스
+	private int currentPhaseIndex = 0; // 현재 페이즈 인덱스 (phaseSkillSets 사용 시)
 	#endregion
 
 	#region Unity Lifecycle
@@ -65,25 +72,45 @@ public partial class BossController : EntityController
 
 	private void InitializeBossSkills()
 	{
-        if (skillSlots != null && skillSlots.Length > 0)
-        {
-            slotCooldownTimers = new float[skillSlots.Length];
-            slotRepeatRemaining = new int[skillSlots.Length];
-            for (int i = 0; i < slotCooldownTimers.Length; i++)
-            {
-                slotCooldownTimers[i] = 0f;
-                slotRepeatRemaining[i] = 0;
-            }
-        }
+		// 페이즈 세트가 지정되어 있으면 0페이즈 세트를 현재 슬롯으로 설정
+		if (phaseSkillSets != null && phaseSkillSets.Length > 0 && phaseSkillSets[0] != null && phaseSkillSets[0].skillSlots != null && phaseSkillSets[0].skillSlots.Length > 0)
+		{
+			currentPhaseIndex = 0;
+			skillSlots = phaseSkillSets[0].skillSlots;
+		}
+
+		RebuildSlotRuntimeArrays();
 
 		if (phaseTriggers != null && phaseTriggers.Length > 0)
 		{
 			phaseFired = new bool[phaseTriggers.Length];
+            phaseRepeatRemaining = new int[phaseTriggers.Length];
 			for (int i = 0; i < phaseFired.Length; i++)
 			{
 				phaseFired[i] = false;
+                phaseRepeatRemaining[i] = 0;
 			}
 		}
+	}
+
+	private void RebuildSlotRuntimeArrays()
+	{
+		if (skillSlots != null && skillSlots.Length > 0)
+		{
+			slotCooldownTimers = new float[skillSlots.Length];
+			slotRepeatRemaining = new int[skillSlots.Length];
+			for (int i = 0; i < slotCooldownTimers.Length; i++)
+			{
+				slotCooldownTimers[i] = 0f;
+				slotRepeatRemaining[i] = 0;
+			}
+		}
+		else
+		{
+			slotCooldownTimers = new float[0];
+			slotRepeatRemaining = new int[0];
+		}
+		nextSlotIndex = 0;
 	}
 	#endregion
 
@@ -97,7 +124,25 @@ public partial class BossController : EntityController
 		if (!isAlive) return;
 		if (isSkillActive) return;
 		if (Time.time < nextAnySkillAllowedAt) return;
-		if (skillSlots == null || skillSlots.Length == 0) return;
+
+        // 페이즈 반복이 진행 중이면 우선 처리
+        if (currentRepeatingPhaseIndex != -1 && phaseRepeatRemaining != null && currentRepeatingPhaseIndex < phaseRepeatRemaining.Length)
+        {
+            if (phaseRepeatRemaining[currentRepeatingPhaseIndex] > 0)
+            {
+                UsePhaseSkill(currentRepeatingPhaseIndex);
+                return;
+            }
+            else
+            {
+                // 안전장치: 남은 횟수 0이면 종료 처리
+                if (phaseFired != null && currentRepeatingPhaseIndex >= 0 && currentRepeatingPhaseIndex < phaseFired.Length)
+                {
+                    phaseFired[currentRepeatingPhaseIndex] = true;
+                }
+                currentRepeatingPhaseIndex = -1;
+            }
+        }
 
 		// 페이즈 스킬 체크 (여러 임계치 지원, 각 1회 발동)
 		if (phaseTriggers != null && phaseTriggers.Length > 0 && phaseFired != null)
@@ -124,43 +169,64 @@ public partial class BossController : EntityController
 
 			if (selectedIndex != -1)
 			{
+				// 반복 횟수 셋업 (최초 진입 시)
+				if (phaseRepeatRemaining != null)
+				{
+					int minUses = Mathf.Max(1, phaseTriggers[selectedIndex].minRepeatUses);
+					int maxUses = Mathf.Max(minUses, phaseTriggers[selectedIndex].maxRepeatUses);
+					if (phaseRepeatRemaining[selectedIndex] <= 0)
+					{
+						phaseRepeatRemaining[selectedIndex] = Random.Range(minUses, maxUses + 1);
+						if (debugSkillLogs)
+						{
+							string n = phaseTriggers[selectedIndex]?.phaseSkill != null ? (!string.IsNullOrEmpty(phaseTriggers[selectedIndex].phaseSkill.skillName) ? phaseTriggers[selectedIndex].phaseSkill.skillName : phaseTriggers[selectedIndex].phaseSkill.name) : "<null>";
+							Debug.Log($"[BossController] Phase {selectedIndex} roll repeats={phaseRepeatRemaining[selectedIndex]} for {n}");
+						}
+					}
+				}
+
+				currentRepeatingPhaseIndex = selectedIndex;
 				UsePhaseSkill(selectedIndex);
 				return;
 			}
 		}
 
-		// 쿨타임 업데이트
-		for (int i = 0; i < slotCooldownTimers.Length; i++)
+		// 슬롯 스킬이 있는 경우에만 슬롯 로직 진행
+		if (skillSlots != null && skillSlots.Length > 0)
 		{
-			slotCooldownTimers[i] -= Time.deltaTime;
-		}
-
-		// 순차 사용: 다음 슬롯 확인
-		int tries = skillSlots.Length;
-		while (tries-- > 0)
-		{
-			int index = nextSlotIndex;
-			var slot = skillSlots[index];
-            if (slot.skill != null && slotCooldownTimers[index] <= 0f && IsInRange(slot))
+			// 쿨타임 업데이트
+			for (int i = 0; i < slotCooldownTimers.Length; i++)
 			{
-				// 반복 남은 횟수가 없으면 [min,max]에서 랜덤으로 셋업
-				int minUses = Mathf.Max(1, slot.minRepeatUses);
-				int maxUses = Mathf.Max(minUses, slot.maxRepeatUses);
-				if (slotRepeatRemaining[index] <= 0)
-				{
-					slotRepeatRemaining[index] = Random.Range(minUses, maxUses + 1); // inclusive
-					if (debugSkillLogs)
-					{
-						string n = slot.skill != null ? (!string.IsNullOrEmpty(slot.skill.skillName) ? slot.skill.skillName : slot.skill.name) : "<null>";
-						Debug.Log($"[BossController] Slot {index} roll repeats={slotRepeatRemaining[index]} for {n}");
-					}
-				}
-
-				UseSlotSkill(index, slot);
-				return;
+				slotCooldownTimers[i] -= Time.deltaTime;
 			}
 
-			nextSlotIndex = (nextSlotIndex + 1) % skillSlots.Length;
+			// 순차 사용: 다음 슬롯 확인
+			int tries = skillSlots.Length;
+			while (tries-- > 0)
+			{
+				int index = nextSlotIndex;
+				var slot = skillSlots[index];
+				if (slot.skill != null && slotCooldownTimers[index] <= 0f && IsInRange(slot))
+				{
+					// 반복 남은 횟수가 없으면 [min,max]에서 랜덤으로 셋업
+					int minUses = Mathf.Max(1, slot.minRepeatUses);
+					int maxUses = Mathf.Max(minUses, slot.maxRepeatUses);
+					if (slotRepeatRemaining[index] <= 0)
+					{
+						slotRepeatRemaining[index] = Random.Range(minUses, maxUses + 1); // inclusive
+						if (debugSkillLogs)
+						{
+							string n = slot.skill != null ? (!string.IsNullOrEmpty(slot.skill.skillName) ? slot.skill.skillName : slot.skill.name) : "<null>";
+							Debug.Log($"[BossController] Slot {index} roll repeats={slotRepeatRemaining[index]} for {n}");
+						}
+					}
+
+					UseSlotSkill(index, slot);
+					return;
+				}
+
+				nextSlotIndex = (nextSlotIndex + 1) % skillSlots.Length;
+			}
 		}
 	}
 	#endregion
@@ -199,7 +265,8 @@ public partial class BossController : EntityController
 
     private void OnSlotSkillUseEnd(int index)
     {
-        if (skillSlots == null || skillSlots.Length == 0) return;
+        // 슬롯이 없어도 페이즈 반복이 진행 중이면 계속 처리되도록 허용
+        if ((skillSlots == null || skillSlots.Length == 0) && currentRepeatingPhaseIndex == -1) return;
         if (index < 0) index = 0;
 
         // 반복 소모
@@ -214,8 +281,12 @@ public partial class BossController : EntityController
 
             if (slotRepeatRemaining[index] > 0)
             {
-                // 반복 중에는 쿨타임 적용하지 않음 (전역 간격만 적용)
+                // 반복 중에는 스킬 쿨타임 적용하지 않음 (전역 간격 X, 반복 간격 O)
                 slotCooldownTimers[index] = 0f;
+                // 같은 슬롯 반복 간격 적용
+                var slot = skillSlots[index];
+                float repeatGap = slot != null ? Mathf.Max(0f, slot.repeatGapSeconds) : 0f;
+                nextAnySkillAllowedAt = Time.time + repeatGap;
                 nextSlotIndex = index; // 같은 슬롯 재시도
                 return;
             }
@@ -228,6 +299,8 @@ public partial class BossController : EntityController
             slotCooldownTimers[index] = s != null && s.skill != null ? s.skill.cooldown : 0f;
         }
         nextSlotIndex = (index + 1) % skillSlots.Length;
+        // 슬롯 전환 시 전역 간격 적용
+        nextAnySkillAllowedAt = Time.time + Mathf.Max(0f, globalSkillGap);
     }
 
 	private void UsePhaseSkill(int index)
@@ -235,11 +308,6 @@ public partial class BossController : EntityController
 		if (phaseTriggers == null || index < 0 || index >= phaseTriggers.Length) return;
 		var phaseTrigger = phaseTriggers[index];
 		if (phaseTrigger == null || !phaseTrigger.IsValid()) return;
-
-		if (phaseFired != null && index >= 0 && index < phaseFired.Length)
-		{
-			phaseFired[index] = true;
-		}
 		isSkillActive = true;
 
 		if (phaseTrigger.lockMovementDuringSkill)
@@ -247,25 +315,104 @@ public partial class BossController : EntityController
 			LockMovement(phaseTrigger.movementLockDuration);
 		}
 
-		if (phaseTrigger.grantInvincibility)
-		{
-			SetInvincible(true);
-		}
+        if (phaseTrigger.grantInvincibility)
+        {
+            // 페이즈 반복 전체 동안 무적 유지
+            SetInvincible(true);
+            isPhaseInvincibleActive = true;
+            invinciblePhaseIndex = index;
+        }
 
 		var skill = phaseTrigger.phaseSkill;
         if (skill.handlerPrefab != null)
-		{
-			UseSkillWithHandler(skill, onEnd: () => { if (phaseTrigger.grantInvincibility) SetInvincible(false); if (debugSkillLogs) { string n = !string.IsNullOrEmpty(skill.skillName) ? skill.skillName : skill.name; Debug.Log($"[BossController] Phase skill ended: {n}"); } });
-		}
-		else if (skill.skillEffectPrefab != null)
-		{
-			UseSkillWithProjectile(phaseTrigger, onEnd: () => { if (phaseTrigger.grantInvincibility) SetInvincible(false); if (debugSkillLogs) { string n = !string.IsNullOrEmpty(skill.skillName) ? skill.skillName : skill.name; Debug.Log($"[BossController] Phase skill ended: {n}"); } });
-		}
+        {
+            UseSkillWithHandler(skill, onEnd: () => { if (debugSkillLogs) { string n = !string.IsNullOrEmpty(skill.skillName) ? skill.skillName : skill.name; Debug.Log($"[BossController] Phase skill ended: {n}"); } PhaseOnEnd(index); });
+        }
+        else if (skill.skillEffectPrefab != null)
+        {
+            UseSkillWithProjectile(phaseTrigger, onEnd: () => { if (debugSkillLogs) { string n = !string.IsNullOrEmpty(skill.skillName) ? skill.skillName : skill.name; Debug.Log($"[BossController] Phase skill ended: {n}"); } PhaseOnEnd(index); });
+        }
 		else
 		{
 			Debug.LogWarning($"[BossController] 페이즈 스킬 프리팹이 비어있습니다.");
 			if (phaseTrigger.grantInvincibility) SetInvincible(false);
 			isSkillActive = false;
+		}
+	}
+
+    private void PhaseOnEnd(int index)
+    {
+        // 하나 사용 완료 처리
+        if (phaseRepeatRemaining != null && index >= 0 && index < phaseRepeatRemaining.Length)
+        {
+            phaseRepeatRemaining[index] = Mathf.Max(0, phaseRepeatRemaining[index] - 1);
+            if (debugSkillLogs)
+            {
+                string n = phaseTriggers[index]?.phaseSkill != null ? (!string.IsNullOrEmpty(phaseTriggers[index].phaseSkill.skillName) ? phaseTriggers[index].phaseSkill.skillName : phaseTriggers[index].phaseSkill.name) : "<null>";
+                Debug.Log($"[BossController] Phase {index} one use finished. repeats left={phaseRepeatRemaining[index]} for {n}");
+            }
+
+            if (phaseRepeatRemaining[index] > 0)
+            {
+                // 반복 지속: 페이즈 반복 간격 적용 후 다시 시도
+                float gap = Mathf.Max(0f, phaseTriggers[index].repeatGapSeconds);
+                nextAnySkillAllowedAt = Time.time + gap;
+                currentRepeatingPhaseIndex = index;
+                // 반복 중에는 무적 유지 (필요 시 상태 갱신)
+                if (phaseTriggers[index].grantInvincibility)
+                {
+                    isPhaseInvincibleActive = true;
+                    invinciblePhaseIndex = index;
+                }
+                return;
+            }
+        }
+
+        // 반복 종료: 페이즈 마감 및 전역 간격 부여
+        if (phaseFired != null && index >= 0 && index < phaseFired.Length)
+        {
+            phaseFired[index] = true;
+        }
+        currentRepeatingPhaseIndex = -1;
+        // 반복이 모두 끝났다면 무적 해제
+        if (isPhaseInvincibleActive && invinciblePhaseIndex == index && phaseTriggers[index].grantInvincibility)
+        {
+            SetInvincible(false);
+            isPhaseInvincibleActive = false;
+            invinciblePhaseIndex = -1;
+        }
+        // 페이즈 스킬 완료 후 다음 페이즈 스킬 세트로 전환 (phaseSkillSets 사용 시)
+        TryAdvancePhaseSkillSet();
+
+        nextAnySkillAllowedAt = Time.time + Mathf.Max(0f, globalSkillGap);
+    }
+
+	private void TryAdvancePhaseSkillSet()
+	{
+		if (phaseSkillSets == null || phaseSkillSets.Length == 0) return;
+		// 발동 완료된 트리거 수를 새 페이즈 인덱스로 사용 (0부터 시작)
+		int firedCount = 0;
+		if (phaseFired != null)
+		{
+			for (int i = 0; i < phaseFired.Length; i++)
+			{
+				if (phaseFired[i]) firedCount++;
+			}
+		}
+		int desiredPhase = Mathf.Clamp(firedCount, 0, phaseSkillSets.Length - 1);
+		if (desiredPhase != currentPhaseIndex)
+		{
+			var set = phaseSkillSets[desiredPhase];
+			if (set != null && set.skillSlots != null && set.skillSlots.Length > 0)
+			{
+				currentPhaseIndex = desiredPhase;
+				skillSlots = set.skillSlots;
+				RebuildSlotRuntimeArrays();
+				if (debugSkillLogs)
+				{
+					Debug.Log($"[BossController] Advanced to phase {currentPhaseIndex}. Switched skill set.");
+				}
+			}
 		}
 	}
 
@@ -344,14 +491,13 @@ public partial class BossController : EntityController
 		}
 	}
 
-	private System.Collections.IEnumerator WaitForSkillEnd(GameObject obj, System.Action onEnd = null)
+    private System.Collections.IEnumerator WaitForSkillEnd(GameObject obj, System.Action onEnd = null)
 	{
 		while (obj != null)
 		{
 			yield return null;
 		}
 		isSkillActive = false;
-		nextAnySkillAllowedAt = Time.time + Mathf.Max(0f, globalSkillGap);
 		onEnd?.Invoke();
 		Debug.Log($"[BossController] {gameObject.name} 스킬 종료 - 다음 스킬 사용 가능");
 	}
@@ -396,6 +542,8 @@ public class BossSkillSlot
 	public int minRepeatUses = 1;
 	[Tooltip("이 슬롯을 연속으로 사용할 최대 횟수 (min 이상)")]
 	public int maxRepeatUses = 1;
+    [Tooltip("같은 슬롯을 연속 사용할 때 각 시전 사이 간격(초). 0이면 즉시 다음 반복")]
+    public float repeatGapSeconds = 0f;
 }
 
 [System.Serializable]
@@ -423,10 +571,28 @@ public class BossPhaseTrigger
 	[Tooltip("페이즈 스킬이 투사체를 사용할 경우 관통 여부")]
 	public bool isPiercing = false;
 
+	[Header("반복 사용")]
+	[Tooltip("이 페이즈 스킬을 연속으로 사용할 최소 횟수 (1 이상)")]
+	public int minRepeatUses = 1;
+	[Tooltip("이 페이즈 스킬을 연속으로 사용할 최대 횟수 (min 이상)")]
+	public int maxRepeatUses = 1;
+	[Tooltip("같은 페이즈 스킬을 연속 사용할 때 각 시전 사이 간격(초)")]
+	public float repeatGapSeconds = 0f;
+
 	public bool IsValid()
 	{
 		return phaseSkill != null;
 	}
+}
+
+[System.Serializable]
+public class BossPhaseSkillSet
+{
+	[Header("페이즈 이름 (선택)")]
+	public string phaseName;
+
+	[Header("해당 페이즈에서 사용할 슬롯들")]
+	public BossSkillSlot[] skillSlots;
 }
 
 

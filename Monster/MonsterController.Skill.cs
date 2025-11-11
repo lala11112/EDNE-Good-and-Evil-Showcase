@@ -153,6 +153,9 @@ public partial class MonsterController : EntityController
         
         // ⭐ 스킬 사용 중 플래그 설정
         isSkillActive = true;
+
+        // ⭐ 애니메이션: 공격 트리거 발동
+        TriggerAttackAnimation();
         
         // ⭐ 방법 1: 핸들러 프리팹 사용 (추천)
         if (skill.handlerPrefab != null)
@@ -278,6 +281,36 @@ public partial class MonsterController : EntityController
     }
     
     #endregion
+    
+    private void TriggerAttackAnimation()
+    {
+		Debug.Log($"[MonsterController] {gameObject.name} Attack animation requested");
+        // 우선 Simple 드라이버가 있으면 사용
+        var simpleDriver = GetComponentInChildren<MonsterAnimatorSimple>();
+        if (simpleDriver != null)
+        {
+            simpleDriver.TriggerAttack();
+			Debug.Log($"[MonsterController] {gameObject.name} Attack via MonsterAnimatorSimple");
+            return;
+        }
+
+        // 그 외 기존 드라이버
+        var driver = GetComponentInChildren<MonsterAnimatorDriver>();
+        if (driver != null)
+        {
+            Vector2? dir = null;
+            if (target != null)
+            {
+                Vector2 toTarget = (Vector2)(target.position - transform.position);
+                if (toTarget.sqrMagnitude > 0.0001f) dir = toTarget.normalized;
+            }
+            driver.TriggerAttack(dir);
+			Debug.Log($"[MonsterController] {gameObject.name} Attack via MonsterAnimatorDriver (dir={(dir.HasValue ? dir.Value.ToString() : "null")})");
+			return;
+        }
+
+		Debug.LogWarning($"[MonsterController] {gameObject.name} Attack requested but no animator driver found");
+    }
     
     #region Skill Control - 스킬 제어 (외부 호출용)
     
