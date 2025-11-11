@@ -44,6 +44,10 @@ public class RoomControllerSO : ScriptableObject
     
     [Tooltip("방 클리어 시 다음 방으로 이동 가능")]
     public bool allowNextRoomOnClear = true;
+    
+    [Header("아이템 스폰 설정")]
+    [Tooltip("방 클리어 시 스폰될 아이템 데이터 리스트")]
+    public List<ItemSpawnData> itemSpawnDataList = new List<ItemSpawnData>();
 
     [Header("몬스터 추적 설정")]
     [Tooltip("몬스터가 방을 벗어났을 때 처리 방식")]
@@ -166,4 +170,25 @@ public enum RewardType
     Gold,              // 골드
     Item,              // 아이템
     SkillPoint         // 스킬 포인트
+}
+
+/// <summary>
+/// 아이템 스폰 데이터
+/// 방 클리어 시 지정된 위치에 아이템을 스폰합니다.
+/// </summary>
+[System.Serializable]
+public class ItemSpawnData
+{
+    [Header("아이템 정보")]
+    [Tooltip("스폰될 아이템 프리팹 (ItemBase 컴포넌트가 있어야 함)")]
+    public GameObject itemPrefab;
+    
+    [Tooltip("아이템 스폰 위치 (Transform 참조, null이면 랜덤 위치)")]
+    public Transform spawnPosition;
+    
+    [Tooltip("스폰 위치 오프셋 (spawnPosition 기준)")]
+    public Vector2 spawnOffset = Vector2.zero;
+    
+    [Tooltip("스폰 시 이펙트 (선택적)")]
+    public GameObject spawnEffect;
 }

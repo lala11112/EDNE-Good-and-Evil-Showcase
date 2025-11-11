@@ -90,3 +90,49 @@ public enum MoveDirection
     DownLeft,   // 왼쪽 아래 (대각선)
     DownRight   // 오른쪽 아래 (대각선)
 }
+
+/// <summary>
+/// 아이템 타입 (Item Type)
+/// </summary>
+public enum ItemType
+{
+    Consumable, // 소비 아이템 (즉시 효과 적용, 인벤토리 등록 안 함)
+    Equipment   // 장비 아이템 (지속 효과 적용, 인벤토리에 등록)
+}
+
+/// <summary>
+/// 아이템 랭크 (Item Rank)
+/// </summary>
+public enum ItemRank
+{
+    D,  // 최하 랭크
+    C,
+    B,
+    A,
+    S   // 최상 랭크
+}
+
+/// <summary>
+/// 구체적인 아이템 식별자 (Specific Item Identifier)
+/// 아이템의 구체적인 종류를 식별합니다.
+/// </summary>
+public enum ItemIdentifier
+{
+    /// <summary>기본 아이템 (미분류)</summary>
+    None = 0,
+    
+    /// <summary>S랭크 운명의 주사위</summary>
+    Dice = 1,
+    
+    /// <summary>A랭크 확신의 사슬</summary>
+    Chain = 2,
+    
+    /// <summary>B랭크 스텔라 프로토콜</summary>
+    Stella = 3,
+    
+    /// <summary>C랭크 심작박동</summary>
+    Heartbeat = 4,
+    
+    /// <summary>포션 등 기타 아이템</summary>
+    Other = 99
+}
