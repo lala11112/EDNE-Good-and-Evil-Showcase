@@ -8,8 +8,8 @@ using UnityEngine;
 public class HeartbeatItemDataSO : ItemDataSO
 {
     [Header("심작박동 설정")]
-    [Tooltip("기본 피해 감소량 (%)")]
-    [SerializeField] private float baseDamageReduction = 10f; // -10%
+    [Tooltip("기본 받는 피해 증가량 (%)")]
+    [SerializeField] private float baseDamageIncrease = 10f; // +10%
     
     [Tooltip("연속 처치 필요 횟수")]
     [SerializeField] private int requiredKillCount = 3;
@@ -19,8 +19,8 @@ public class HeartbeatItemDataSO : ItemDataSO
     
     #region 프로퍼티
     
-    /// <summary>기본 피해 감소량 (%)</summary>
-    public float BaseDamageReduction => baseDamageReduction;
+    /// <summary>기본 받는 피해 증가량 (%)</summary>
+    public float BaseDamageIncrease => baseDamageIncrease;
     
     /// <summary>연속 처치 필요 횟수</summary>
     public int RequiredKillCount => requiredKillCount;

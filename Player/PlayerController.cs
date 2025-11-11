@@ -617,6 +617,17 @@ public class PlayerController : EntityController
 		float regenMultiplier = isUltimateBuffActive 
 			? playerData.ultimateBuffMentalPowerRegenMultiplier 
 			: 1f;
+		
+		// ⭐ 아이템 시스템: 운명의 주사위 정신력회복속도 효과 적용
+		if (ItemController.Instance != null)
+		{
+			DiceEffectData diceEffect = ItemController.Instance.GetDiceEffect();
+			if (diceEffect.mentalRecoverySpeedModifier != 0f)
+			{
+				regenMultiplier *= (1f + diceEffect.mentalRecoverySpeedModifier / 100f);
+			}
+		}
+		
 		float regenAmount = baseRegenAmount * regenMultiplier;
 		
 		accumulatedRegen += regenAmount;
@@ -1117,6 +1128,13 @@ public class PlayerController : EntityController
 		
 		// ⭐ 전투 행동 발생: 전투 시간 연장 및 전투 없음 페널티 누적량 초기화
 		HandleCombatAction("몬스터 처치로 인한");
+		
+		// ⭐ 아이템 시스템: 몬스터 처치 이벤트 전달
+		// 확신의 사슬, 심작박동 효과 적용
+		if (ItemController.Instance != null)
+		{
+			ItemController.Instance.OnMonsterKilled(monster);
+		}
 	}
 
 	/// <summary>
@@ -2189,7 +2207,7 @@ public class PlayerController : EntityController
 	
 	/// <summary>
 	/// 이동 속도 배율 가져오기 (오버라이드)
-	/// EntityController의 기본 배율에 S랭크 궁극기 버프 배율 추가
+	/// EntityController의 기본 배율에 S랭크 궁극기 버프 배율 및 아이템 효과 추가
 	/// </summary>
 	public override float GetMoveSpeedMultiplier()
 	{
@@ -2200,6 +2218,16 @@ public class PlayerController : EntityController
 		if (isUltimateBuffActive && playerData != null)
 		{
 			baseMultiplier *= playerData.ultimateBuffMoveSpeedMultiplier;
+		}
+		
+		// ⭐ 아이템 시스템: 운명의 주사위 이동속도 효과 적용
+		if (ItemController.Instance != null)
+		{
+			DiceEffectData diceEffect = ItemController.Instance.GetDiceEffect();
+			if (diceEffect.moveSpeedModifier != 0f)
+			{
+				baseMultiplier *= (1f + diceEffect.moveSpeedModifier / 100f);
+			}
 		}
 		
 		return baseMultiplier;
@@ -2230,6 +2258,13 @@ public class PlayerController : EntityController
 	protected override void OnDamaged(int damageAmount, object damageSource)
 	{
 		base.OnDamaged(damageAmount, damageSource);
+		
+		// ⭐ 아이템 시스템: 플레이어 피격 이벤트 전달
+		// 스텔라 프로토콜 파괴 처리
+		if (ItemController.Instance != null)
+		{
+			ItemController.Instance.OnPlayerDamaged(damageAmount);
+		}
 		
 		// 체력 변경 이벤트 발생 (플레이어 전용)
 		PlayerStatusEvents.InvokeHealthChanged(CurrentHealth, MaxHealth);
@@ -2543,6 +2578,7 @@ public class PlayerController : EntityController
 	
 	/// <summary>
 	/// 스킬 데미지 계산 (공격력 기반 퍼센테이지)
+	/// 아이템 효과가 적용된 공격력을 사용합니다.
 	/// </summary>
 	/// <param name="damagePercent">데미지 퍼센테이지 (100 = 공격력 100%)</param>
 	/// <returns>최종 계산된 데미지</returns>
@@ -2550,18 +2586,55 @@ public class PlayerController : EntityController
 	{
 		if (playerData == null) return 0f;
 		
+		// 아이템 효과가 적용된 공격력 사용
+		float attackPower = GetAttackPower();
+		
 		// 공격력 * (퍼센테이지 / 100)
-		float finalDamage = playerData.attackPower * (damagePercent / 100f);
+		float finalDamage = attackPower * (damagePercent / 100f);
 		
 		return finalDamage;
 	}
 	
 	/// <summary>
 	/// 공격력 반환 (외부 접근용)
+	/// 아이템 효과를 적용한 최종 공격력을 반환합니다.
 	/// </summary>
 	public float GetAttackPower()
 	{
-		return playerData != null ? playerData.attackPower : 0f;
+		if (playerData == null) return 0f;
+		
+		float baseAttackPower = playerData.attackPower;
+		float finalAttackPower = baseAttackPower;
+		
+		// ⭐ 아이템 시스템: 아이템 효과 적용
+		if (ItemController.Instance != null)
+		{
+			// 운명의 주사위: 공격력 변경량 (%)
+			DiceEffectData diceEffect = ItemController.Instance.GetDiceEffect();
+			if (diceEffect.attackPowerModifier != 0f)
+			{
+				finalAttackPower *= (1f + diceEffect.attackPowerModifier / 100f);
+			}
+			
+			// 확신의 사슬: 스택당 공격력 증가 (%)
+			ChainEffectData chainEffect = ItemController.Instance.GetChainEffect();
+			if (chainEffect.currentStack > 0)
+			{
+				// ItemController에서 스택당 공격력 증가량 가져오기
+				float attackPowerPerKill = ItemController.Instance.GetChainAttackPowerPerKill();
+				float chainBonusPercent = chainEffect.currentStack * attackPowerPerKill;
+				finalAttackPower *= (1f + chainBonusPercent / 100f);
+			}
+			
+			// 스텔라 프로토콜: 공격력 +100%
+			StellaEffectData stellaEffect = ItemController.Instance.GetStellaEffect();
+			if (stellaEffect.isActive)
+			{
+				finalAttackPower *= 2f; // +100% = 2배
+			}
+		}
+		
+		return finalAttackPower;
 	}
 
 	/// <summary>

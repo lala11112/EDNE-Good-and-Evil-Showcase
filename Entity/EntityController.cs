@@ -235,8 +235,48 @@ public class EntityController : MonoBehaviour
 			return false;
 		}
 
+		// ⭐ 아이템 시스템: 플레이어 공격 시 심작박동 데미지 보너스 적용
+		int finalDamage = damageAmount;
+		if (attackerType == EntityType.Player && ItemController.Instance != null)
+		{
+			float heartbeatBonus = ItemController.Instance.GetHeartbeatDamageBonus();
+			if (heartbeatBonus > 0f)
+			{
+				// 보너스가 있으면 데미지에 적용 (예: +150% = 1.5배)
+				finalDamage = Mathf.RoundToInt(damageAmount * (1f + heartbeatBonus / 100f));
+#if UNITY_EDITOR
+				Debug.Log($"[EntityController] 심작박동 데미지 보너스 적용: {damageAmount} → {finalDamage} (+{heartbeatBonus}%)");
+#endif
+			}
+		}
+		
+		// ⭐ 아이템 시스템: 플레이어가 피격받을 때 받는 피해 효과 적용
+		if (EntityType == EntityType.Player && ItemController.Instance != null)
+		{
+			// 스텔라 프로토콜: 받는 피해 +100% (활성화되어 있을 때만)
+			StellaEffectData stellaEffect = ItemController.Instance.GetStellaEffect();
+			if (stellaEffect.isActive)
+			{
+				finalDamage = Mathf.RoundToInt(finalDamage * 2f); // +100% = 2배
+#if UNITY_EDITOR
+				Debug.Log($"[EntityController] 스텔라 프로토콜 받는 피해 증가: {damageAmount} → {finalDamage} (+100%)");
+#endif
+			}
+			
+			// 심작박동: 받는 피해 +10% (항상 적용)
+			HeartbeatEffectData heartbeatEffect = ItemController.Instance.GetHeartbeatEffect();
+			if (ItemController.Instance.IsItemActive(ItemIdentifier.Heartbeat))
+			{
+				// 기본 피해 증가 10% 적용
+				finalDamage = Mathf.RoundToInt(finalDamage * 1.1f); // +10% = 1.1배
+#if UNITY_EDITOR
+				Debug.Log($"[EntityController] 심작박동 받는 피해 증가: {damageAmount} → {finalDamage} (+10%)");
+#endif
+			}
+		}
+
 		// 체력 감소
-		currentHealth = Mathf.Max(0, currentHealth - damageAmount);
+		currentHealth = Mathf.Max(0, currentHealth - finalDamage);
 
 		// 체력 변경 이벤트 발생
 		OnHealthChanged?.Invoke(currentHealth, MaxHealth);

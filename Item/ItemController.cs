@@ -594,6 +594,14 @@ public class ItemController : MonoBehaviour
     }
     
     /// <summary>
+    /// 확신의 사슬 공격력 증가량 조회 (스택당 %)
+    /// </summary>
+    public float GetChainAttackPowerPerKill()
+    {
+        return isChainActive && chainItemData != null ? chainItemData.AttackPowerPerKill : 0f;
+    }
+    
+    /// <summary>
     /// 스텔라 프로토콜 효과 조회
     /// </summary>
     public StellaEffectData GetStellaEffect()
