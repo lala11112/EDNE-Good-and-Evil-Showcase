@@ -224,6 +224,18 @@ public abstract class ItemBase : MonoBehaviour
         
         isAcquired = true;
         
+        // UI 숨김 처리 (아이템 획득 시 즉시 UI 사라지게 함)
+        HideItemInfo();
+        
+        // 플레이어 범위 상태 초기화
+        isPlayerInRange = false;
+        
+        // PlayerController에서 아이템 등록 해제
+        if (playerController != null)
+        {
+            playerController.UnregisterNearbyItem(this);
+        }
+        
         // 아이템 획득 이펙트 재생
         PlayAcquireEffect();
         
