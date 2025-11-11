@@ -28,9 +28,25 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     [Tooltip("자폭/프리뷰 반경 색상")]
     [SerializeField] private Color explosionColor = Color.red;
     [Tooltip("자폭 시각 효과 표시 시간 (초)")]
-    [SerializeField] private float explosionDuration = 0.5f;
+    [SerializeField] private float explosionDuration = 0.3f;
     [Tooltip("자폭 VFX 프리팹 (선택)")]
     [SerializeField] private GameObject explosionEffectPrefab; // 자폭 이펙트 프리팹
+	
+	[Header("교체 VFX 설정")]
+	[Tooltip("자폭 순간 본체를 VFX 프리팹으로 대체")]
+	[SerializeField] private bool replaceWithVFXOnExplosion = true;
+	[Tooltip("VFX로 대체 시 본체 GameObject를 파괴할지 여부")]
+	[SerializeField] private bool destroyDeadObject = true;
+	
+	[Header("VFX 크기/수명 설정")]
+	[Tooltip("폭발 반경에 맞춰 VFX를 스케일링")]
+	[SerializeField] private bool scaleVFXToExplosionRadius = true;
+	[Tooltip("VFX가 Scale=1일 때의 반경(월드 단위)")]
+	[SerializeField] private float vfxRadiusAtScale1 = 1f;
+	[Tooltip("추가 스케일 배수")]
+	[SerializeField] private float vfxScaleMultiplier = 1f;
+	[Tooltip("VFX 유지 시간 (초). 0 이하면 파티클 자동수명에 맡김")]
+	[SerializeField] private float vfxLifetime = 2f;
     
     [Header("프리뷰 설정")]
     [Tooltip("자폭 전에 반경 프리뷰를 표시")]
@@ -56,6 +72,7 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     
     private bool hasExploded = false;
     private HashSet<EntityController> hitEntities = new HashSet<EntityController>(); // 중복 피해 방지
+	private GameObject deadEnemyRef; // 사망한 본체 참조
     
     #endregion
     
@@ -88,6 +105,7 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         if (hasExploded) return; // 중복 실행 방지
         
         hasExploded = true;
+		deadEnemyRef = deadEnemy != null ? deadEnemy : gameObject;
         
         Debug.Log($"[ExplosionOnDeathScript] {deadEnemy.name}이 자폭합니다! 반경: {explosionRadius}");
         
@@ -103,6 +121,7 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         if (hasExploded) return;
         
         hasExploded = true;
+		deadEnemyRef = deadEnemy != null ? deadEnemy : gameObject;
         
         // 위치 설정
         transform.position = position;
@@ -122,18 +141,26 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     /// </summary>
     private IEnumerator ExecuteExplosion()
     {
-        // 1. 자폭 반경 프리뷰 즉시 표시
-        GameObject previewVisual = CreateExplosionVisual(previewColor, previewAlpha);
-        
-        // 2. 자폭까지 대기: deathExplosionDelay가 설정되면 우선 사용, 아니면 preExplosionDelay 사용
-        float waitSeconds = deathExplosionDelay > 0f ? deathExplosionDelay : preExplosionDelay;
+		// 1. 자폭 반경 프리뷰 (옵션)
+		GameObject previewVisual = null;
+		float waitSeconds = deathExplosionDelay;
+		if (showPreviewBeforeExplosion)
+		{
+			previewVisual = CreateExplosionVisual(previewColor, previewAlpha);
+			if (waitSeconds <= 0f)
+			{
+				waitSeconds = preExplosionDelay;
+			}
+		}
+		
+		// 2. 자폭까지 대기
         if (waitSeconds > 0f)
         {
             yield return new WaitForSeconds(waitSeconds);
         }
         
         // 프리뷰 제거
-        if (previewVisual != null)
+		if (previewVisual != null)
         {
             Destroy(previewVisual);
         }
@@ -141,11 +168,21 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         // 3. 피해 적용
         ApplyExplosionDamage();
         
-        // 4. 이펙트 프리팹 생성 (있는 경우)
-        if (explosionEffectPrefab != null)
-        {
-            CreateExplosionEffect();
-        }
+		// 4. VFX 교체/생성
+		if (replaceWithVFXOnExplosion)
+		{
+			ReplaceWithVFX();
+		}
+		else if (explosionEffectPrefab != null)
+		{
+			CreateExplosionEffect();
+		}
+		
+		// 5. 자폭 직후 반경 시각 효과 (옵션)
+		if (showExplosionEffect)
+		{
+			StartCoroutine(ShowExplosionEffect());
+		}
     }
     
     /// <summary>
@@ -158,11 +195,12 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         
         if (explosionVisual != null)
         {
+			// 혹시 코루틴이 중단되어도 자동 파괴되도록 예약
+			float life = Mathf.Max(0.01f, explosionDuration);
+			Destroy(explosionVisual, life);
+			
             // 자폭 지속 시간만큼 대기
-            yield return new WaitForSeconds(explosionDuration);
-            
-            // 시각적 효과 제거
-            Destroy(explosionVisual);
+			yield return new WaitForSeconds(life);
         }
     }
     
@@ -287,11 +325,70 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
         if (explosionEffectPrefab != null)
         {
             GameObject effect = Instantiate(explosionEffectPrefab, transform.position, Quaternion.identity);
+			
+			// 폭발 반경에 맞춰 스케일 조정
+			if (scaleVFXToExplosionRadius)
+			{
+				float baseRadius = vfxRadiusAtScale1 > 0f ? vfxRadiusAtScale1 : 1f;
+				float uniformScale = (explosionRadius / baseRadius) * Mathf.Max(0.0001f, vfxScaleMultiplier);
+				effect.transform.localScale = new Vector3(uniformScale, uniformScale, uniformScale);
+			}
             
             // 이펙트가 일정 시간 후 자동으로 파괴되도록 설정
-            Destroy(effect, 2f);
+			if (vfxLifetime > 0f)
+			{
+				Destroy(effect, vfxLifetime);
+			}
         }
     }
+	
+	private void ReplaceWithVFX()
+	{
+		// 대체 대상 루트 결정
+		GameObject targetRoot = deadEnemyRef != null ? deadEnemyRef : gameObject;
+		
+		// 1) VFX 생성
+		if (explosionEffectPrefab != null)
+		{
+			GameObject effect = Instantiate(explosionEffectPrefab, targetRoot.transform.position, targetRoot.transform.rotation);
+			
+			// 폭발 반경에 맞춰 스케일 조정
+			if (scaleVFXToExplosionRadius)
+			{
+				float baseRadius = vfxRadiusAtScale1 > 0f ? vfxRadiusAtScale1 : 1f;
+				float uniformScale = (explosionRadius / baseRadius) * Mathf.Max(0.0001f, vfxScaleMultiplier);
+				effect.transform.localScale = new Vector3(uniformScale, uniformScale, uniformScale);
+			}
+			
+			// 유지 시간 설정
+			if (vfxLifetime > 0f)
+			{
+				Destroy(effect, vfxLifetime);
+			}
+		}
+		else
+		{
+			Debug.LogWarning("[ExplosionOnDeathScript] explosionEffectPrefab이 설정되지 않았습니다. 본체만 비활성/삭제됩니다.");
+		}
+		
+		// 2) 본체 비활성화/삭제
+		if (targetRoot != null)
+		{
+			// 렌더러/콜라이더 비활성화 (즉시 시각/충돌 제거)
+			foreach (var r in targetRoot.GetComponentsInChildren<Renderer>()) r.enabled = false;
+			foreach (var c in targetRoot.GetComponentsInChildren<Collider2D>()) c.enabled = false;
+			foreach (var c3 in targetRoot.GetComponentsInChildren<Collider>()) c3.enabled = false;
+			
+			if (destroyDeadObject)
+			{
+				Destroy(targetRoot);
+			}
+		}
+		else
+		{
+			Debug.LogWarning("[ExplosionOnDeathScript] 대체할 대상(GameObject)을 찾지 못했습니다.");
+		}
+	}
     
     #endregion
     
@@ -328,6 +425,14 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     {
         preExplosionDelay = Mathf.Max(0f, seconds);
     }
+	
+	/// <summary>
+	/// 폭발 직후 반경 표시 시간 설정 (외부 스크립트에서 조정용)
+	/// </summary>
+	public void SetExplosionDuration(float seconds)
+	{
+		explosionDuration = Mathf.Max(0f, seconds);
+	}
     
     /// <summary>
     /// 타겟 플레이어 설정
@@ -358,6 +463,9 @@ public class ExplosionOnDeathScript : MonoBehaviour, IEnemyDeathScript
     /// </summary>
     private void OnDrawGizmosSelected()
     {
+		// 플레이 중 폭발이 끝났다면 기즈모를 더 이상 표시하지 않음
+		if (Application.isPlaying && hasExploded) return;
+		
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, explosionRadius);
     }
