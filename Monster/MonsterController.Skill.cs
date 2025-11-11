@@ -21,6 +21,8 @@ public partial class MonsterController : EntityController
 	[SerializeField] private bool useInitialAttackDelay = false;
 	[Tooltip("첫 공격/스킬 사용 전 대기 시간(초)")]
 	[SerializeField] private float initialAttackDelay = 1.0f;
+	[Tooltip("첫 스킬 지연 동안 이동도 정지합니다")]
+	[SerializeField] private bool blockMovementDuringInitialDelay = false;
 
 	// 첫 스킬 지연 상태
 	private float initialAttackTimer = 0f;
@@ -56,6 +58,12 @@ public partial class MonsterController : EntityController
 		{
 			initialAttackTimer = Mathf.Max(0f, initialAttackDelay);
 			initialDelayConsumed = initialAttackTimer <= 0f;
+
+			// 요청 시: 대기 시간 동안 이동도 확실히 정지
+			if (blockMovementDuringInitialDelay && initialAttackTimer > 0f)
+			{
+				LockMovement(initialAttackTimer);
+			}
 		}
 		else
 		{
