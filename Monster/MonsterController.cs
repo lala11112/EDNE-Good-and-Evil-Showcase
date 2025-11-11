@@ -265,6 +265,12 @@ public partial class MonsterController : EntityController
             animator.SetTrigger("OnDamage");
         }
         
+        // ⭐ 피격 사운드 재생
+        if (monsterData != null && monsterData.hitSound != null)
+        {
+            PlaySound(monsterData.hitSound, monsterData.audioMixerGroup);
+        }
+        
         // ⭐ 피격 깜빡임 효과
         if (spriteRenderer != null)
         {
@@ -347,6 +353,12 @@ public partial class MonsterController : EntityController
         }
         
         base.Die();
+        
+        // ⭐ 사망 사운드 재생
+        if (monsterData != null && monsterData.deathSound != null)
+        {
+            PlaySound(monsterData.deathSound, monsterData.audioMixerGroup);
+        }
         
         // NavMesh 이동 정지
         if (navAgent != null)
@@ -439,6 +451,34 @@ public partial class MonsterController : EntityController
     public RoomController GetRoomController()
     {
         return roomController;
+    }
+    
+    #endregion
+    
+    #region Sound - 사운드 재생
+    
+    /// <summary>
+    /// 사운드 재생 (AudioMixerGroup 적용)
+    /// </summary>
+    private void PlaySound(AudioClip clip, UnityEngine.Audio.AudioMixerGroup mixerGroup)
+    {
+        if (clip == null) return;
+        
+        // 임시 GameObject 생성
+        GameObject soundObject = new GameObject("MonsterSound_" + clip.name);
+        soundObject.transform.position = transform.position;
+        
+        // AudioSource 추가 및 설정
+        AudioSource audioSource = soundObject.AddComponent<AudioSource>();
+        audioSource.clip = clip;
+        audioSource.outputAudioMixerGroup = mixerGroup;
+        audioSource.spatialBlend = 1f; // 3D 사운드
+        audioSource.volume = 1f;
+        audioSource.pitch = 1f;
+        audioSource.Play();
+        
+        // 재생 완료 후 자동 삭제
+        Destroy(soundObject, clip.length);
     }
     
     #endregion
