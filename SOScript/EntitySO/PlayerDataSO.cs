@@ -190,6 +190,15 @@ public class PlayerDataSO : EntityDataSO
     [Range(1f, 2f)]
     public float ultimateBuffMoveSpeedMultiplier = 1.2f;
     
+    [Space(10)]
+    [Header("S랭크 궁극기 이펙트")]
+    [Tooltip("S랭크 스킬 사용 시 재생될 이펙트 프리팹 (플레이어 위치에 생성)")]
+    public GameObject ultimateSkillEffect;
+    
+    [Tooltip("이펙트 지속 시간 (초) - ParticleSystem이 없을 경우 자동 삭제 시간")]
+    [Range(0.5f, 10f)]
+    public float ultimateSkillEffectDuration = 3f;
+    
     #endregion
     
     #region 사망 이펙트
