@@ -325,6 +325,9 @@ public partial class MonsterController : EntityController
     protected override void Die()
     {
         Debug.Log("다이");
+
+		// 애니메이션: 사망 트리거 발동
+		TriggerDeathAnimation();
         
         // ⭐ 스킬로 처치된 경우 이벤트 발생 (용기 시스템용)
         // 데미지 소스에서 스킬 정보 추출
@@ -429,6 +432,31 @@ public partial class MonsterController : EntityController
 
     // 이벤트
     public System.Action<MonsterController> OnMonsterDied;
+
+	/// <summary>
+	/// 애니메이션: 사망 트리거 실행
+	/// </summary>
+	private void TriggerDeathAnimation()
+	{
+		Debug.Log($"[MonsterController] {gameObject.name} Death animation requested");
+		var simpleDriver = GetComponentInChildren<MonsterAnimatorSimple>();
+		if (simpleDriver != null)
+		{
+			simpleDriver.TriggerDeath();
+			Debug.Log($"[MonsterController] {gameObject.name} Death via MonsterAnimatorSimple");
+			return;
+		}
+
+		var driver = GetComponentInChildren<MonsterAnimatorDriver>();
+		if (driver != null)
+		{
+			driver.TriggerDeath(null);
+			Debug.Log($"[MonsterController] {gameObject.name} Death via MonsterAnimatorDriver");
+			return;
+		}
+
+		Debug.LogWarning($"[MonsterController] {gameObject.name} Death requested but no animator driver found");
+	}
     
     /// <summary>
     /// 몬스터가 스킬로 처치되었을 때 발생하는 이벤트

@@ -10,6 +10,9 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
     [Header("충격파 설정")]
     [Tooltip("충격파 프리팹 (직사각형 스프라이트)")]
     [SerializeField] private GameObject shockwavePrefab;
+		
+		[Header("사망 시 즉시 종료")]
+		[SerializeField] private bool cancelOnOwnerDeath = true;
     
     [Header("생성 위치 설정")]
     [Tooltip("충격파가 생성될 거리 (몬스터 앞)")]
@@ -22,6 +25,11 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
     private GameObject ownerObject;
     private MonsterController ownerController;
     private Transform target;
+
+		// 활성 충격파 참조 (즉시 종료용)
+		private Shockwave activeShockwave;
+		private GameObject activeShockwaveObj;
+		private bool subscribedToDeathEvent = false;
     
     #region SkillHandlerInterface 구현
     
@@ -37,6 +45,12 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
         if (ownerController != null)
         {
             target = ownerController.Target;
+
+				if (cancelOnOwnerDeath && !subscribedToDeathEvent)
+				{
+					ownerController.OnMonsterDied += OnOwnerDied;
+					subscribedToDeathEvent = true;
+				}
         }
         
         Debug.Log($"[ShockwaveHandler] Setup 완료");
@@ -123,6 +137,8 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
         if (shockwave != null)
         {
             shockwave.Initialize(skillData.damage, EntityType.Monster, shockwaveSize);
+				activeShockwave = shockwave;
+				activeShockwaveObj = shockwaveObj;
         }
         else
         {
@@ -134,6 +150,10 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
         
         // 5. 충격파가 끝날 때까지 대기 (경고 → 발동 → 종료)
         yield return new WaitUntil(() => shockwaveObj == null);
+
+			// 완료되었으므로 참조 해제
+			activeShockwave = null;
+			activeShockwaveObj = null;
         
         // 6. 핸들러 정리 (LockMovement는 시간이 지나면 자동 해제됨)
         Debug.Log("[ShockwaveHandler] 충격파 완료");
@@ -165,5 +185,52 @@ public class ShockwaveHandler : MonoBehaviour, SkillHandlerInterface
     }
     
     #endregion
+
+		private void OnOwnerDied(MonsterController _)
+		{
+			if (!cancelOnOwnerDeath) return;
+
+			// 즉시 코루틴 중단 및 충격파 취소
+			try
+			{
+				StopAllCoroutines();
+			}
+			catch { }
+
+			if (activeShockwave != null)
+			{
+				activeShockwave.CancelImmediately();
+			}
+			else if (activeShockwaveObj != null)
+			{
+				Destroy(activeShockwaveObj);
+			}
+
+			activeShockwave = null;
+			activeShockwaveObj = null;
+
+			// 핸들러 자체도 정리
+			Cleanup();
+		}
+
+		private void OnDestroy()
+		{
+			// 이벤트 구독 해제
+			if (subscribedToDeathEvent && ownerController != null)
+			{
+				ownerController.OnMonsterDied -= OnOwnerDied;
+				subscribedToDeathEvent = false;
+			}
+		}
+
+		private void OnDisable()
+		{
+			// 안전하게 구독 해제
+			if (subscribedToDeathEvent && ownerController != null)
+			{
+				ownerController.OnMonsterDied -= OnOwnerDied;
+				subscribedToDeathEvent = false;
+			}
+		}
 }
 

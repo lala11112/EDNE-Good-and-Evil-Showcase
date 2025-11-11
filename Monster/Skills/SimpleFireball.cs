@@ -77,6 +77,15 @@ public class SimpleFireball : MonoBehaviour, ISkillProjectile
         Debug.Log($"[SimpleFireball] 관통 여부: {(isPiercing ? "관통형" : "충돌 시 파괴")}");
     }
     
+	/// <summary>
+	/// 스킬 슬롯 타입 가져오기 (ISkillProjectile 인터페이스 구현)
+	/// 몬스터 스킬은 플레이어 스킬이 아니므로 null 반환
+	/// </summary>
+	public SkillSlotType? GetSkillSlotType()
+	{
+		return null; // 몬스터 투사체는 슬롯 타입이 없음
+	}
+	
     #endregion
     
     #region Unity Lifecycle

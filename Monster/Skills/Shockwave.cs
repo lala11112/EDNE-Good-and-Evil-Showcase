@@ -273,6 +273,25 @@ public class Shockwave : MonoBehaviour
     
     #region 충돌 처리
     
+	/// <summary>
+	/// 즉시 취소: 코루틴 중단, 콜라이더 비활성화, VFX 정리 후 즉시 파괴
+	/// </summary>
+	public void CancelImmediately()
+	{
+		StopAllCoroutines();
+		isActive = false;
+		if (boxCollider != null) boxCollider.enabled = false;
+
+		// 실행 중 생성된 피벗/자식 VFX 정리
+		var pivot = transform.Find("ShockwaveVFXPivot");
+		if (pivot != null)
+		{
+			Destroy(pivot.gameObject);
+		}
+
+		Destroy(gameObject);
+	}
+	
     private bool TryApplyDamage(EntityController targetEc)
     {
         if (targetEc == null) return false;
