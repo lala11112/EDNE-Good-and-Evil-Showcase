@@ -195,9 +195,9 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 
         // 원본 복원/프리페이드 제거: 요구사항에 따라 즉시 노랑 표시
 
-		// 단순 색 전환: 반투명 노랑(2초) → 즉시 빨강 (알파 조절 가능)
+		// 단순 색 전환: 반투명 노랑(2초) → 즉시 보라색 (알파 조절 가능)
         Color preColor = new Color(1f, 0.92f, 0.16f, 0.5f);    // 노랑, α=0.5
-		Color postColor = new Color(1f, 0f, 0f, Mathf.Clamp01(redAlpha)); // 빨강, α=redAlpha
+		Color postColor = new Color(0.6f, 0f, 1f, Mathf.Clamp01(redAlpha)); // 보라, α=redAlpha
         for (int i = 0; i < spriteRenderers.Length; i++)
         {
             spriteRenderers[i].enabled = true;
