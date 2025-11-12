@@ -54,6 +54,27 @@ public abstract class ItemBase : MonoBehaviour
         
         // PlayerController 찾기
         playerController = PlayerController.Instance;
+        
+        // 아이템 SO의 스폰 이펙트를 자식으로 소환
+        SpawnItemEffect();
+    }
+    
+    /// <summary>
+    /// 아이템 SO의 스폰 이펙트를 자식으로 소환
+    /// </summary>
+    private void SpawnItemEffect()
+    {
+        if (itemData == null || itemData.spawnEffect == null) return;
+        
+        // 이펙트를 아이템의 자식으로 소환
+        GameObject effect = Instantiate(itemData.spawnEffect, transform);
+        effect.transform.localPosition = Vector3.zero;
+        effect.transform.localRotation = Quaternion.identity;
+        
+        // 이펙트는 아이템과 함께 삭제되므로 별도 삭제 로직 불필요
+#if UNITY_EDITOR
+        Debug.Log($"[ItemBase] 아이템 스폰 이펙트 생성: {itemData.itemName} - {itemData.spawnEffect.name}");
+#endif
     }
     
     protected virtual void Update()
@@ -223,6 +244,18 @@ public abstract class ItemBase : MonoBehaviour
         if (isAcquired) return;
         
         isAcquired = true;
+        
+        // UI 숨김 처리 (아이템 획득 시 즉시 UI 사라지게 함)
+        HideItemInfo();
+        
+        // 플레이어 범위 상태 초기화
+        isPlayerInRange = false;
+        
+        // PlayerController에서 아이템 등록 해제
+        if (playerController != null)
+        {
+            playerController.UnregisterNearbyItem(this);
+        }
         
         // 아이템 획득 이펙트 재생
         PlayAcquireEffect();
