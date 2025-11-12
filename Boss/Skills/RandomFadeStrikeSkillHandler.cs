@@ -71,8 +71,10 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 	[Header("SFX")]
 	[Tooltip("노랑 → 빨강(데미지 적용)으로 전환되는 순간 재생할 효과음")]
 	[SerializeField] private AudioClip redSwitchSfx;
-	[Range(0f, 1f)]
+	[Range(0f, 2f)]
 	[SerializeField] private float redSwitchSfxVolume = 1f;
+	[SerializeField, Tooltip("효과음을 2D로 재생하여 거리 감쇠를 제거합니다")]
+	private bool redSwitchSfx2D = true;
 
 	[Header("동시 발동 설정")]
 	[Tooltip("한 번에 최대 몇 개의 타겟을 동시에 전환/타격할지 (1 이상)")]
@@ -232,7 +234,7 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 			Vector3 sfxPos = selected.transform.position;
 			var col = selected.GetComponentInChildren<Collider2D>();
 			if (col != null) sfxPos = col.bounds.center;
-			AudioSource.PlayClipAtPoint(redSwitchSfx, sfxPos, Mathf.Clamp01(redSwitchSfxVolume));
+			PlayRedSwitchSfxAt(sfxPos);
 		}
 		// 필요 시 동일 프레임에 히트 VFX도 함께 출력
 		if (useHitVFX && hitVFXPrefab != null)
@@ -259,6 +261,32 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 
         onDone?.Invoke();
     }
+
+	private void PlayRedSwitchSfxAt(Vector3 worldPos)
+	{
+		if (redSwitchSfx == null) return;
+		// 2D 재생: 거리 감쇠 없음, 확실한 볼륨
+		if (redSwitchSfx2D)
+		{
+			GameObject go = new GameObject("RedSwitchSFX_2D");
+			// 카메라 따라가도록
+			if (Camera.main != null) go.transform.SetParent(Camera.main.transform, false);
+			go.transform.position = Camera.main != null ? Camera.main.transform.position : worldPos;
+			var src = go.AddComponent<AudioSource>();
+			src.clip = redSwitchSfx;
+			src.volume = Mathf.Clamp01(redSwitchSfxVolume);
+			src.spatialBlend = 0f; // 2D
+			src.playOnAwake = false;
+			src.loop = false;
+			src.Stop();
+			src.Play();
+			Object.Destroy(go, redSwitchSfx.length + 0.1f);
+			return;
+		}
+
+		// 3D 재생(기본)
+		AudioSource.PlayClipAtPoint(redSwitchSfx, worldPos, Mathf.Clamp01(redSwitchSfxVolume));
+	}
 
 	private void SpawnHitVFXForColliders(GameObject targetRoot)
 	{
