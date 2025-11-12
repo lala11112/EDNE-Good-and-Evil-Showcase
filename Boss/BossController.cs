@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 
 /// <summary>
@@ -15,6 +16,8 @@ public partial class BossController : EntityController
 	[Header("사망 처리 설정")]
 	[SerializeField] private bool destroyOnDeath = true;
 	[SerializeField] private float destroyDelay = 2f;
+	[SerializeField, Tooltip("보스 사망 후 로드할 씬 이름 (비워두면 로드하지 않음)")] private string gameClearSceneName = "GameClear";
+	[SerializeField, Tooltip("보스 사망 후 씬 로드 지연(초)")] private float gameClearLoadDelay = 2f;
 	#endregion
 
 	#region Spawn Sequence
@@ -253,6 +256,20 @@ public partial class BossController : EntityController
 		{
 			Destroy(gameObject, Mathf.Max(0f, destroyDelay));
 		}
+
+		// 게임 클리어 씬 로드 예약
+		if (!string.IsNullOrEmpty(gameClearSceneName))
+		{
+			StartCoroutine(CoLoadSceneAfterDelay(gameClearSceneName, Mathf.Max(0f, gameClearLoadDelay)));
+		}
+	}
+	#endregion
+
+	#region Scene Load
+	private IEnumerator CoLoadSceneAfterDelay(string sceneName, float delaySeconds)
+	{
+		if (delaySeconds > 0f) yield return new WaitForSeconds(delaySeconds);
+		SceneManager.LoadScene(sceneName);
 	}
 	#endregion
     

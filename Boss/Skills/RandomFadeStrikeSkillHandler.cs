@@ -68,6 +68,12 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("히트 VFX 프리팹의 파티클이 부모/트랜스폼 스케일을 따르도록 강제")]
 	[SerializeField] private bool forceHitVFXHierarchyScaling = true;
 
+	[Header("SFX")]
+	[Tooltip("노랑 → 빨강(데미지 적용)으로 전환되는 순간 재생할 효과음")]
+	[SerializeField] private AudioClip redSwitchSfx;
+	[Range(0f, 1f)]
+	[SerializeField] private float redSwitchSfxVolume = 1f;
+
 	[Header("동시 발동 설정")]
 	[Tooltip("한 번에 최대 몇 개의 타겟을 동시에 전환/타격할지 (1 이상)")]
 	[SerializeField] private int maxSimultaneousStrikes = 2;
@@ -219,6 +225,14 @@ public class RandomFadeStrikeSkillHandler : MonoBehaviour, SkillHandlerInterface
 		for (int i = 0; i < spriteRenderers.Length; i++)
 		{
 			spriteRenderers[i].color = postColor; // 전환과 동시에 타격
+		}
+		// 전환 SFX 재생 (타겟 중심에서)
+		if (redSwitchSfx != null)
+		{
+			Vector3 sfxPos = selected.transform.position;
+			var col = selected.GetComponentInChildren<Collider2D>();
+			if (col != null) sfxPos = col.bounds.center;
+			AudioSource.PlayClipAtPoint(redSwitchSfx, sfxPos, Mathf.Clamp01(redSwitchSfxVolume));
 		}
 		// 필요 시 동일 프레임에 히트 VFX도 함께 출력
 		if (useHitVFX && hitVFXPrefab != null)
