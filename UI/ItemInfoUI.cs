@@ -11,7 +11,7 @@ public class ItemInfoUI : MonoBehaviour
 {
     #region 싱글톤 패턴
     
-    /// <summary>
+    /// <summary>         
     /// ItemInfoUI 인스턴스 (씬에 하나만 존재)
     /// </summary>
     public static ItemInfoUI Instance { get; private set; }
@@ -43,6 +43,11 @@ public class ItemInfoUI : MonoBehaviour
     
     [Tooltip("상호작용 키 (기본값: E)")]
     [SerializeField] private string interactKey = "E";
+    
+    /// <summary>
+    /// 현재 UI에 표시되고 있는 아이템
+    /// </summary>
+    private ItemDataSO currentDisplayedItem = null;
     
     private void Awake()
     {
@@ -76,9 +81,12 @@ public class ItemInfoUI : MonoBehaviour
     {
         if (itemData == null)
         {
-            Debug.LogWarning("[ItemInfoUI] itemData가 null입니다!");
+            //Debug.LogWarning("[ItemInfoUI] itemData가 null입니다!");
             return;
         }
+        
+        // 현재 표시 중인 아이템 저장
+        currentDisplayedItem = itemData;
         
         // 아이템 이름 설정
         if (itemNameText != null)
@@ -118,7 +126,7 @@ public class ItemInfoUI : MonoBehaviour
             interactHintText.text = string.Format(interactHintFormat, interactKey);
         }
         
-        // UI 표시
+
         ShowUI();
     }
     
@@ -131,11 +139,26 @@ public class ItemInfoUI : MonoBehaviour
     }
     
     /// <summary>
-    /// UI 숨김
+    /// UI 숨김 (강제)
     /// </summary>
     public void HideUI()
     {
+        currentDisplayedItem = null;
         gameObject.SetActive(false);
+    }
+    
+    /// <summary>
+    /// 특정 아이템의 정보 UI 숨김
+    /// 해당 아이템이 현재 표시 중인 아이템인 경우에만 UI를 숨깁니다.
+    /// </summary>
+    /// <param name="itemData">숨기려는 아이템 데이터</param>
+    public void HideItemInfo(ItemDataSO itemData)
+    {
+        // 현재 표시 중인 아이템이 요청한 아이템과 같을 때만 UI를 숨김
+        if (currentDisplayedItem == itemData)
+        {
+            HideUI();
+        }
     }
     
     /// <summary>

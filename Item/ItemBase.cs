@@ -88,7 +88,15 @@ public abstract class ItemBase : MonoBehaviour
         }
         else
         {
-            HideItemInfo();
+            // 플레이어와의 거리가 10 이하일 때만 UI를 숨김
+            if (playerController != null)
+            {
+                float distance = Vector2.Distance(transform.position, playerController.transform.position);
+                if (distance <= 10f)
+                {
+                    HideItemInfo();
+                }
+            }
         }
     }
     
@@ -105,7 +113,7 @@ public abstract class ItemBase : MonoBehaviour
         if (playerController == null || other.gameObject != playerController.gameObject) return;
         
         // 이미 획득한 아이템이면 무시
-        if (isAcquired) return;
+        // if (isAcquired) return;
         
         // 거리 체크 (interactionRange 내에 있는지 확인)
         if (itemData != null)
@@ -224,9 +232,10 @@ public abstract class ItemBase : MonoBehaviour
         // ItemInfoUI 찾기
         ItemInfoUI ui = FindItemInfoUI();
         
-        if (ui != null)
+        if (ui != null && itemData != null)
         {
-            ui.HideUI();
+            // 이 아이템이 현재 표시 중인 아이템인 경우에만 UI를 숨김
+            ui.HideItemInfo(itemData);
         }
     }
     
