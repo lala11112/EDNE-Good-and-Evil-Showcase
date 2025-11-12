@@ -72,6 +72,13 @@ public class BossSpawnTrigger : MonoBehaviour
 		if (bossController != null)
 		{
 			bossController.StartSpawnSequence();
+
+			// Boss HP UI 매니저에 보스 컨트롤러를 연결 (씬 내 모든 매니저 대상)
+			var managers = FindObjectsOfType<BossHealthBarManager>();
+			for (int i = 0; i < managers.Length; i++)
+			{
+				managers[i].AttachToBoss(bossController);
+			}
 		}
 
 		// 카메라 쉐이크 예약

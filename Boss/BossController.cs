@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
+
 /// <summary>
 /// 보스 컨트롤러 - EntityController 기반으로 보스의 체력/사망을 관리합니다.
 /// EntityDataSO를 사용해 MonsterController와 동일한 방식으로 초기화합니다.
@@ -22,8 +23,9 @@ public partial class BossController : EntityController
 	private float spawnAnimationDuration = 2f;
 	#endregion
 
-    
 
+    
+ 
 	#region Events - 외부 알림
 	public System.Action<BossController> OnBossDied;
 	public System.Action<BossController> OnSpawnSequenceEnded;
@@ -42,6 +44,8 @@ public partial class BossController : EntityController
 
 		// MonsterController와 유사하게 Awake 시점에 1차 초기화
 		Initialize();
+
+
 	}
 
 	protected override void Update()
@@ -217,6 +221,7 @@ public partial class BossController : EntityController
 		{
 			simpleDriver.TriggerHit();
 		}
+
 	}
 
 	/// <summary>
@@ -250,8 +255,8 @@ public partial class BossController : EntityController
 		}
 	}
 	#endregion
-
     
+ 
 }
 
 
