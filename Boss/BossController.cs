@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 /// <summary>
 /// 보스 컨트롤러 - EntityController 기반으로 보스의 체력/사망을 관리합니다.
@@ -15,10 +16,17 @@ public partial class BossController : EntityController
 	[SerializeField] private float destroyDelay = 2f;
 	#endregion
 
+	#region Spawn Sequence
+	[Header("스폰 연출")]
+	[SerializeField, Tooltip("스폰 애니메이션이 재생되는 기간(초). 이 시간 동안 무적/공격불가")]
+	private float spawnAnimationDuration = 2f;
+	#endregion
+
     
 
 	#region Events - 외부 알림
 	public System.Action<BossController> OnBossDied;
+	public System.Action<BossController> OnSpawnSequenceEnded;
 	#endregion
 
 	#region Unity Lifecycle
@@ -55,6 +63,49 @@ public partial class BossController : EntityController
 		bossData = data;
 		entityData = data;
 		Initialize();
+	}
+	#endregion
+
+	#region Spawn
+	/// <summary>
+	/// 트리거로 처음 소환되었을 때 호출하여 스폰 연출을 재생하고,
+	/// 연출 종료 전까지 무적/공격불가로 유지합니다.
+	/// </summary>
+	/// <param name="overrideDuration">지정 시 해당 시간으로 덮어씀</param>
+	public void StartSpawnSequence(float? overrideDuration = null)
+	{
+		float dur = Mathf.Max(0f, overrideDuration ?? spawnAnimationDuration);
+
+		// 무적 및 스킬 비활성
+		SetInvincible(true);
+		enableSkills = false;
+
+		// 스폰 애니메이션 트리거
+		var simpleDriver = GetComponentInChildren<MonsterAnimatorSimple>();
+		if (simpleDriver != null)
+		{
+			simpleDriver.TriggerSpawn();
+		}
+		else
+		{
+			Debug.LogWarning($"[BossController] {gameObject.name} Spawn requested but MonsterAnimatorSimple not found");
+		}
+
+		// 일정 시간 후 해제
+		StartCoroutine(CoEndSpawnSequence(dur));
+	}
+
+	private IEnumerator CoEndSpawnSequence(float duration)
+	{
+		if (duration > 0f) yield return new WaitForSeconds(duration);
+
+		// 스폰 연출 종료: 무적 해제 및 스킬 활성화
+		SetInvincible(false);
+		enableSkills = true;
+
+		// HP UI 등 외부 시스템이 이 시점에 활성화될 수 있도록 알림
+		OnSpawnSequenceEnded?.Invoke(this);
+		Debug.Log($"[BossController] {gameObject.name} 스폰 연출 종료 - 외부 알림 전송");
 	}
 	#endregion
 
@@ -159,6 +210,13 @@ public partial class BossController : EntityController
 	{
 		base.OnDamaged(damageAmount, damageSource);
 		Debug.Log($"[BossController] {gameObject.name}가 {damageAmount} 데미지를 받음 (HP: {currentHealth}/{MaxHealth})");
+
+		// 애니메이션: 피격 트리거 즉시 실행 (MonsterAnimatorSimple 사용)
+		var simpleDriver = GetComponentInChildren<MonsterAnimatorSimple>();
+		if (simpleDriver != null)
+		{
+			simpleDriver.TriggerHit();
+		}
 	}
 
 	/// <summary>
@@ -169,6 +227,21 @@ public partial class BossController : EntityController
 		base.Die();
 
 		Debug.Log($"[BossController] {gameObject.name} 사망");
+
+		// 진행 중인 스킬/연출 즉시 중지
+		CancelAllSkillsImmediately();
+
+		// 애니메이션: 사망 트리거 실행 (MonsterAnimatorSimple만 사용)
+		var simpleDriver = GetComponentInChildren<MonsterAnimatorSimple>(true);
+		if (simpleDriver == null)
+		{
+			Debug.LogWarning($"[BossController] {gameObject.name} 사망 트리거 요청 실패 - MonsterAnimatorSimple을 찾을 수 없음 (비활성 포함 검색)");
+		}
+		if (simpleDriver != null)
+		{
+			Debug.Log($"[BossController] {gameObject.name} 사망 트리거 시도 (MonsterAnimatorSimple)");
+			simpleDriver.TriggerDeath();
+		}
 		OnBossDied?.Invoke(this);
 
 		if (destroyOnDeath)

@@ -360,6 +360,9 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
         float width = hitRadius * 2f;
         telegraph.transform.localScale = new Vector3(length, width, 1f);
         
+        // 안전장치: 4초 후 자동 제거
+        Destroy(telegraph, 4f);
+        
         return telegraph;
     }
 }

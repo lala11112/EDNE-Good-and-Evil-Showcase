@@ -25,6 +25,8 @@ public class MonsterAnimatorSimple : MonoBehaviour
 	[SerializeField] private string paramAttackTrigger = "Attack";    // 공격 트리거
 	[SerializeField] private string paramDeathTrigger = "Death";      // 사망 트리거
 	[SerializeField] private string paramIsDead = "IsDead";           // 사망 상태
+	[SerializeField] private string paramHitTrigger = "Hit";          // 피격 트리거
+	[SerializeField] private string paramSpawnTrigger = "Spawn";      // 등장(스폰) 트리거
 
 	[Header("Facing Settings")]
 	[SerializeField] private bool invertFlipX = false; // 리소스 방향이 반대라면 true
@@ -196,7 +198,7 @@ public class MonsterAnimatorSimple : MonoBehaviour
 		}
 
 		animator.SetTrigger(paramAttackTrigger);
-		Debug.Log("Attack트리거 호출됨!", this);
+		Debug.Log("공격 트리거 호출됨!", this);
 	}
 
 	/// <summary>
@@ -210,18 +212,73 @@ public class MonsterAnimatorSimple : MonoBehaviour
 		foreach (var p in animator.parameters)
 		{
 			if (p.name == paramIsDead && p.type == AnimatorControllerParameterType.Bool) hasIsDead = true;
-			if (p.name == paramDeathTrigger && p.type == AnimatorControllerParameterType.Trigger) hasDeath = true;
+			//if (p.name == paramDeathTrigger && p.type == AnimatorControllerParameterType.Trigger) hasDeath = true;
 		}
-		if (!hasIsDead || !hasDeath)
+		// if (!hasIsDead || !hasDeath)
+		// {
+		// 	Debug.LogWarning($"[MonsterAnimatorSimple] Death 파라미터 누락. IsDead({hasIsDead}) DeathTrigger({hasDeath}) " +
+		// 		$"(controller='{animator.runtimeAnimatorController?.name ?? "null"}')", animator);
+		// 	return;
+		// }
+
+		animator.SetBool(paramIsDead, true);
+		animator.SetTrigger(paramDeathTrigger);
+		Debug.Log("사망 트리거 호출됨!", this);
+		Debug.Log("사망 트리거 작동됨!", this);
+	}
+
+	/// <summary>
+	/// 외부(컨트롤러/AI)에서 호출하는 피격 트리거
+	/// </summary>
+	public void TriggerHit()
+	{
+		if (animator == null) return;
+
+		bool hasParam = false;
+		foreach (var p in animator.parameters)
 		{
-			Debug.LogWarning($"[MonsterAnimatorSimple] Death 파라미터 누락. IsDead({hasIsDead}) DeathTrigger({hasDeath}) " +
+			if (p.name == paramHitTrigger && p.type == AnimatorControllerParameterType.Trigger)
+			{
+				hasParam = true;
+				break;
+			}
+		}
+		if (!hasParam)
+		{
+			Debug.LogWarning($"[MonsterAnimatorSimple] Hit trigger '{paramHitTrigger}' 가 Animator에 없습니다. " +
 				$"(controller='{animator.runtimeAnimatorController?.name ?? "null"}')", animator);
 			return;
 		}
 
-		animator.SetBool(paramIsDead, true);
-		animator.SetTrigger(paramDeathTrigger);
-		Debug.Log("Death 트리거 호출됨!", this);
+		animator.SetTrigger(paramHitTrigger);
+		Debug.Log("피격 트리거 작동됨!", this);
+	}
+
+	/// <summary>
+	/// 외부(컨트롤러/AI)에서 호출하는 등장(스폰) 트리거
+	/// </summary>
+	public void TriggerSpawn()
+	{
+		if (animator == null) return;
+
+		bool hasParam = false;
+		foreach (var p in animator.parameters)
+		{
+			if (p.name == paramSpawnTrigger && p.type == AnimatorControllerParameterType.Trigger)
+			{
+				hasParam = true;
+				break;
+			}
+		}
+		if (!hasParam)
+		{
+			Debug.LogWarning($"[MonsterAnimatorSimple] Spawn trigger '{paramSpawnTrigger}' 가 Animator에 없습니다. " +
+				$"(controller='{animator.runtimeAnimatorController?.name ?? "null"}')", animator);
+			return;
+		}
+
+		animator.SetTrigger(paramSpawnTrigger);
+		Debug.Log("스폰 트리거 호출됨!", this);
 	}
 }
 
