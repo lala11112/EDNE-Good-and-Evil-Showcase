@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using UnityEngine.SceneManagement;
+using PixelCrushers.DialogueSystem;
 
 
 /// <summary>
@@ -16,8 +17,14 @@ public partial class BossController : EntityController
 	[Header("사망 처리 설정")]
 	[SerializeField] private bool destroyOnDeath = true;
 	[SerializeField] private float destroyDelay = 2f;
-	[SerializeField, Tooltip("보스 사망 후 로드할 씬 이름 (비워두면 로드하지 않음)")] private string gameClearSceneName = "GameClear";
-	[SerializeField, Tooltip("보스 사망 후 씬 로드 지연(초)")] private float gameClearLoadDelay = 2f;
+	
+	[Header("다이얼로그 및 클리어 씬 설정")]
+	[SerializeField, Tooltip("보스 사망 시 재생할 다이얼로그 제목 (비워두면 다이얼로그 없이 바로 씬 전환)")] 
+	private string bossDeathDialogue = "";
+	[SerializeField, Tooltip("보스 사망 후 로드할 씬 이름 (비워두면 로드하지 않음)")] 
+	private string gameClearSceneName = "GameClear";
+	[SerializeField, Tooltip("다이얼로그 없이 씬 전환할 경우의 지연 시간(초)")] 
+	private float gameClearLoadDelay = 2f;
 	#endregion
 
 	#region Spawn Sequence
@@ -34,6 +41,11 @@ public partial class BossController : EntityController
 	public System.Action<BossController> OnSpawnSequenceEnded;
 	#endregion
 
+	/// <summary>
+	/// 다이얼로그 종료 대기 중인지 여부
+	/// </summary>
+	private bool isWaitingForDialogueEnd = false;
+
 	#region Unity Lifecycle
 	protected override void Awake()
 	{
@@ -47,8 +59,15 @@ public partial class BossController : EntityController
 
 		// MonsterController와 유사하게 Awake 시점에 1차 초기화
 		Initialize();
+	}
 
-
+	private void OnDestroy()
+	{
+		// 다이얼로그 이벤트 구독 해제 (메모리 누수 방지)
+		if (DialogueManager.instance != null && isWaitingForDialogueEnd)
+		{
+			DialogueManager.instance.conversationEnded -= OnDeathDialogueEnded;
+		}
 	}
 
 	protected override void Update()
@@ -229,6 +248,7 @@ public partial class BossController : EntityController
 
 	/// <summary>
 	/// 사망 처리: 이벤트 브로드캐스트 및 선택적 파괴
+	/// 다이얼로그가 설정되어 있으면 다이얼로그를 재생하고, 종료 후 클리어 씬으로 전환합니다.
 	/// </summary>
 	protected override void Die()
 	{
@@ -252,15 +272,81 @@ public partial class BossController : EntityController
 		}
 		OnBossDied?.Invoke(this);
 
+		// 보스 오브젝트 파괴 처리
 		if (destroyOnDeath)
 		{
 			Destroy(gameObject, Mathf.Max(0f, destroyDelay));
 		}
 
-		// 게임 클리어 씬 로드 예약
+		// 다이얼로그 설정이 있으면 다이얼로그 재생 후 씬 전환
+		// 없으면 바로 씬 전환
+		if (!string.IsNullOrEmpty(bossDeathDialogue))
+		{
+			StartDeathDialogue();
+		}
+		else
+		{
+			// 다이얼로그 없이 게임 클리어 씬 로드
+			LoadGameClearScene();
+		}
+	}
+
+	/// <summary>
+	/// 보스 사망 시 다이얼로그를 시작합니다.
+	/// </summary>
+	private void StartDeathDialogue()
+	{
+		if (DialogueManager.instance == null)
+		{
+			Debug.LogWarning($"[BossController] DialogueManager를 찾을 수 없습니다! 다이얼로그 없이 씬을 전환합니다.");
+			LoadGameClearScene();
+			return;
+		}
+
+		// 다이얼로그 종료 이벤트 구독
+		isWaitingForDialogueEnd = true;
+		DialogueManager.instance.conversationEnded += OnDeathDialogueEnded;
+
+		// 다이얼로그 시작
+		DialogueManager.StartConversation(bossDeathDialogue);
+		Debug.Log($"[BossController] 보스 사망 다이얼로그 시작: '{bossDeathDialogue}'");
+	}
+
+	/// <summary>
+	/// 보스 사망 다이얼로그가 종료되었을 때 호출되는 콜백
+	/// </summary>
+	private void OnDeathDialogueEnded(Transform actor)
+	{
+		// 현재 종료된 대화가 보스 사망 다이얼로그인지 확인
+		string endedConversation = DialogueManager.lastConversationEnded;
+		
+		if (endedConversation == bossDeathDialogue)
+		{
+			Debug.Log($"[BossController] 보스 사망 다이얼로그 종료: '{endedConversation}' - 클리어 씬 전환");
+			
+			// 이벤트 구독 해제
+			if (DialogueManager.instance != null)
+			{
+				DialogueManager.instance.conversationEnded -= OnDeathDialogueEnded;
+			}
+			isWaitingForDialogueEnd = false;
+
+			// 클리어 씬으로 전환
+			LoadGameClearScene();
+		}
+	}
+
+	/// <summary>
+	/// 게임 클리어 씬을 로드합니다.
+	/// </summary>
+	private void LoadGameClearScene()
+	{
 		if (!string.IsNullOrEmpty(gameClearSceneName))
 		{
-			StartCoroutine(CoLoadSceneAfterDelay(gameClearSceneName, Mathf.Max(0f, gameClearLoadDelay)));
+			// 다이얼로그가 있었으면 지연 없이 즉시 전환, 없었으면 설정된 지연 시간 사용
+			float delay = string.IsNullOrEmpty(bossDeathDialogue) ? gameClearLoadDelay : 0f;
+			StartCoroutine(CoLoadSceneAfterDelay(gameClearSceneName, Mathf.Max(0f, delay)));
+			Debug.Log($"[BossController] 게임 클리어 씬 로드 예약: '{gameClearSceneName}' ({delay}초 후)");
 		}
 	}
 	#endregion
