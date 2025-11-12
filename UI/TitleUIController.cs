@@ -1,6 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TMPro;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace EDNE.UI
 {
@@ -18,8 +22,11 @@ namespace EDNE.UI
         [SerializeField] private Button quitGameButton;
 
         [Header("Scene Settings")]
-        [Tooltip("Game Start 버튼을 누르면 이동할 씬")]
-        [SerializeField] private GameScene targetScene = GameScene.Level_01_Gameplay;
+        [Tooltip("Game Start 버튼을 누르면 이동할 씬 (드래그 앤 드롭)")]
+#if UNITY_EDITOR
+        [SerializeField] private SceneAsset targetSceneAsset;
+#endif
+        [SerializeField] private string targetSceneName = "Level_01_Gameplay_pjw";
 
         [Header("Panels")]
         [SerializeField] private GameObject mainPanel;
@@ -34,6 +41,20 @@ namespace EDNE.UI
             // 처음에는 메인 패널만 활성화
             ShowMainPanel();
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// 에디터에서 값이 변경될 때 호출 (드래그 앤 드롭 시 자동으로 씬 이름 업데이트)
+        /// </summary>
+        private void OnValidate()
+        {
+            if (targetSceneAsset != null)
+            {
+                string assetPath = AssetDatabase.GetAssetPath(targetSceneAsset);
+                targetSceneName = System.IO.Path.GetFileNameWithoutExtension(assetPath);
+            }
+        }
+#endif
 
         private void InitializeOptionPanel()
         {
@@ -65,8 +86,17 @@ namespace EDNE.UI
 
         private void OnGameStartClicked()
         {
-            Debug.Log($"게임 시작! 이동할 씬: {targetScene}");
-            UIManager.Instance.LoadScene(targetScene);
+            Debug.Log($"게임 시작! 이동할 씬: {targetSceneName}");
+            
+            // 씬 이름이 비어있지 않으면 로드
+            if (!string.IsNullOrEmpty(targetSceneName))
+            {
+                SceneManager.LoadScene(targetSceneName);
+            }
+            else
+            {
+                Debug.LogError("[TitleUI] 씬 이름이 설정되지 않았습니다!");
+            }
         }
 
         private void OnOptionClicked()

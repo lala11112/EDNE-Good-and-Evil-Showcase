@@ -208,6 +208,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("카메라 쉐이크 무작위성 (0~1)")]
 	[SerializeField] private float shakeRandomness = 0.5f;
 	
+	// 생성된 이펙트 추적 (정리용)
+	private List<GameObject> activeEffects = new List<GameObject>();
+	
 	#endregion
 	
 	#region SkillHandlerInterface 구현
@@ -282,10 +285,52 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		StopSRankMode();
 		StopAllCoroutines();
 		
+		// 생성된 모든 이펙트 즉시 제거
+		CleanupAllEffects();
+		
 		skillData = null;
 		owner = null;
 		playerController = null;
 		skillSlot = null;
+	}
+	
+	/// <summary>
+	/// 생성된 모든 이펙트 정리
+	/// </summary>
+	private void CleanupAllEffects()
+	{
+		foreach (var effect in activeEffects)
+		{
+			if (effect != null)
+			{
+				Destroy(effect);
+			}
+		}
+		activeEffects.Clear();
+	}
+	
+	/// <summary>
+	/// 이미 파괴된(null) 이펙트를 리스트에서 제거
+	/// </summary>
+	private void RemoveNullEffects()
+	{
+		activeEffects.RemoveAll(effect => effect == null);
+	}
+	
+	/// <summary>
+	/// 컴포넌트 비활성화 시 이펙트 정리
+	/// </summary>
+	private void OnDisable()
+	{
+		CleanupAllEffects();
+	}
+	
+	/// <summary>
+	/// 컴포넌트 파괴 시 이펙트 정리
+	/// </summary>
+	private void OnDestroy()
+	{
+		CleanupAllEffects();
 	}
 	
 	#endregion
@@ -421,6 +466,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			
 			trail = Instantiate(dashTrailPrefab, playerController.transform.position, rotation);
 			trail.transform.SetParent(playerController.transform);
+			
+			// 이펙트 추적 리스트에 추가
+			activeEffects.Add(trail);
 		}
 		
 		// 바람을 가르는 이펙트 생성 (플레이어와 함께 돌진)
@@ -433,6 +481,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			
 			windEffect = Instantiate(windSlashEffectPrefab, playerController.transform.position, rotation);
 			windEffect.transform.SetParent(playerController.transform);
+			
+			// 이펙트 추적 리스트에 추가
+			activeEffects.Add(windEffect);
 			
 			Debug.Log($"[CourageRush] 바람 이펙트 생성 (각도: {angle}도)");
 		}
@@ -575,6 +626,10 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			{
 				GameObject effect = Instantiate(rechargeReadyEffectPrefab, playerController.transform.position, Quaternion.identity);
 				effect.transform.SetParent(playerController.transform);
+				
+				// 이펙트 추적 리스트에 추가
+				activeEffects.Add(effect);
+				
 				Destroy(effect, 2f);
 			}
 		}
@@ -600,6 +655,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 		
 		// 14. 충돌한 적 목록 초기화 (다음 대쉬를 위해)
 		// hitEnemiesDuringDash.Clear(); // 다음 대쉬 시작 시 초기화하므로 여기서는 불필요
+		
+		// 15. 이미 파괴된 이펙트를 리스트에서 제거 (메모리 관리)
+		RemoveNullEffects();
 	}
 	
 	#endregion
@@ -658,6 +716,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			// 크기 조정
 			aoeEffect.transform.localScale = Vector3.one * (aoeRadius * 2f);
 			
+			// 이펙트 추적 리스트에 추가
+			activeEffects.Add(aoeEffect);
+			
 			Destroy(aoeEffect, aoeDuration);
 		}
 		
@@ -668,6 +729,9 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			
 			// 크기 조정 (AOE 범위에 맞춤)
 			distortion.transform.localScale = Vector3.one * (aoeRadius * 2f);
+			
+			// 이펙트 추적 리스트에 추가
+			activeEffects.Add(distortion);
 			
 			// 열 왜곡 효과는 AOE보다 조금 더 오래 유지
 			Destroy(distortion, aoeDuration + 1f);
@@ -714,6 +778,10 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			if (enemyCollisionEffectPrefab != null)
 			{
 				GameObject effect = Instantiate(enemyCollisionEffectPrefab, entity.transform.position, Quaternion.identity);
+				
+				// 이펙트 추적 리스트에 추가
+				activeEffects.Add(effect);
+				
 				Destroy(effect, 1f);
 			}
 			
@@ -779,6 +847,10 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			{
 				GameObject effect = Instantiate(trailExplosionEffectPrefab, position, Quaternion.identity);
 				effect.transform.localScale = Vector3.one * (trailExplosionRadius * 2f);
+				
+				// 이펙트 추적 리스트에 추가
+				activeEffects.Add(effect);
+				
 				Destroy(effect, 1.5f);
 			}
 			
@@ -828,6 +900,10 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			{
 				GameObject effect = Instantiate(rechargeReadyEffectPrefab, playerController.transform.position, Quaternion.identity);
 				effect.transform.SetParent(playerController.transform);
+				
+				// 이펙트 추적 리스트에 추가
+				activeEffects.Add(effect);
+				
 				Destroy(effect, 2f);
 			}
 		}
