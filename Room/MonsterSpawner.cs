@@ -158,6 +158,13 @@ public class MonsterSpawner : MonoBehaviour
                 Debug.Log($"[MonsterSpawner] {spawnerName}에서 RoomController 자동 찾기 성공: {connectedRoomController.name}");
             }
         }
+
+		// 스폰 데이터 유효성 검사 (NRE 방지)
+		if (spawnData == null || spawnData.monsterPrefab == null)
+		{
+			Debug.LogError($"[MonsterSpawner] {spawnerName} 스폰 실패: MonsterSpawnData 또는 monsterPrefab이 비어있습니다.");
+			return;
+		}
         
         // 위협 표시 이펙트 활성화
         if (warningEffect != null)
@@ -183,7 +190,7 @@ public class MonsterSpawner : MonoBehaviour
 
         PlaySpawnWarningSound();
 
-        Debug.Log($"[MonsterSpawner] {spawnerName}에서 {spawnData.monsterPrefab.name} 스폰 시작 (대기시간: {warningTime}초)");
+		Debug.Log($"[MonsterSpawner] {spawnerName}에서 {spawnData.monsterPrefab?.name ?? "null"} 스폰 시작 (대기시간: {warningTime}초)");
     }
 
     /// <summary>

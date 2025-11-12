@@ -114,6 +114,46 @@ public partial class BossController : EntityController
 	}
 	#endregion
 
+	#region Immediate Cancel/Stop
+	/// <summary>
+	/// 보스 사망 등으로 즉시 모든 스킬/연출을 중지하고 정리합니다.
+	/// </summary>
+	private void CancelAllSkillsImmediately()
+	{
+		// 추가 사용 방지
+		enableSkills = false;
+		isSkillActive = false;
+
+		// 반복/페이즈 상태 초기화
+		currentRepeatingPhaseIndex = -1;
+		if (slotRepeatRemaining != null)
+		{
+			for (int i = 0; i < slotRepeatRemaining.Length; i++) slotRepeatRemaining[i] = 0;
+		}
+		if (phaseRepeatRemaining != null)
+		{
+			for (int i = 0; i < phaseRepeatRemaining.Length; i++) phaseRepeatRemaining[i] = 0;
+		}
+
+		// 이 컨트롤러에서 시작한 코루틴 중지
+		StopAllCoroutines();
+
+		// 현재 자식으로 달린 스킬 핸들러/오브젝트 제거
+		var handlers = GetComponentsInChildren<SkillHandlerInterface>(true);
+		if (handlers != null)
+		{
+			for (int i = 0; i < handlers.Length; i++)
+			{
+				var comp = handlers[i] as Component;
+				if (comp != null && comp.gameObject != null)
+				{
+					Destroy(comp.gameObject);
+				}
+			}
+		}
+	}
+	#endregion
+
 	#region Main Loop
 	/// <summary>
 /// BossController.Update에서 호출됨
