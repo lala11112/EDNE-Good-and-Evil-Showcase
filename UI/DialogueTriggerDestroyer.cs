@@ -18,9 +18,35 @@ public class DialogueTriggerDestroyer : MonoBehaviour
 	/// 다이얼로그가 이미 시작되었는지 추적 (중복 방지)
 	/// </summary>
 	private bool hasDialogueStarted = false;
+	
+	/// <summary>
+	/// 이 오브젝트의 대화 제목 (DialogueSystemTrigger에서 가져옴)
+	/// </summary>
+	private string myConversationTitle = "";
+	
+	/// <summary>
+	/// DialogueSystemTrigger 컴포넌트 캐싱
+	/// </summary>
+	private DialogueSystemTrigger dialogueTrigger;
 
 	private void Start()
 	{
+		// DialogueSystemTrigger 컴포넌트 가져오기
+		dialogueTrigger = GetComponent<DialogueSystemTrigger>();
+		if (dialogueTrigger != null)
+		{
+			// 이 오브젝트의 대화 제목 저장
+			myConversationTitle = dialogueTrigger.conversation;
+			
+#if UNITY_EDITOR
+			Debug.Log($"[DialogueTriggerDestroyer] 초기화 완료: {gameObject.name}, 대화 제목: '{myConversationTitle}'");
+#endif
+		}
+		else
+		{
+			Debug.LogWarning($"[DialogueTriggerDestroyer] DialogueSystemTrigger를 찾을 수 없습니다! ({gameObject.name})");
+		}
+		
 		// Dialogue System 이벤트 구독
 		if (DialogueManager.instance != null)
 		{
@@ -49,10 +75,16 @@ public class DialogueTriggerDestroyer : MonoBehaviour
 	/// </summary>
 	private void OnDialogueStart(Transform actor)
 	{
-		// 이 오브젝트와 관련된 다이얼로그인지 확인
-		if (!hasDialogueStarted && IsDialogueFromThisObject())
+		// 현재 시작된 대화가 이 오브젝트의 대화인지 확인
+		string startedConversation = DialogueManager.lastConversationStarted;
+		
+		if (!hasDialogueStarted && !string.IsNullOrEmpty(myConversationTitle) && startedConversation == myConversationTitle)
 		{
 			hasDialogueStarted = true;
+			
+#if UNITY_EDITOR
+			Debug.Log($"[DialogueTriggerDestroyer] 내 대화 시작됨: {gameObject.name}, 대화: '{startedConversation}'");
+#endif
 			
 			// 콜라이더 비활성화 (중복 트리거 방지)
 			if (disableColliderOnStart)
@@ -75,27 +107,19 @@ public class DialogueTriggerDestroyer : MonoBehaviour
 	/// </summary>
 	private void OnDialogueEnd(Transform actor)
 	{
-		// 이 오브젝트가 시작한 다이얼로그인지 확인
-		if (hasDialogueStarted && IsDialogueFromThisObject())
+		// 현재 종료된 대화가 이 오브젝트의 대화인지 확인
+		string endedConversation = DialogueManager.lastConversationEnded;
+		
+		if (hasDialogueStarted && !string.IsNullOrEmpty(myConversationTitle) && endedConversation == myConversationTitle)
 		{
 			// 오브젝트 삭제 (딜레이 후)
 			Destroy(gameObject, destroyDelay);
 			
 #if UNITY_EDITOR
-			Debug.Log($"[DialogueTriggerDestroyer] 다이얼로그 종료 후 오브젝트 삭제 예정: {gameObject.name} ({destroyDelay}초 후)");
+			Debug.Log($"[DialogueTriggerDestroyer] 내 대화 종료됨! 오브젝트 삭제 예정: {gameObject.name}, 대화: '{endedConversation}' ({destroyDelay}초 후)");
 #endif
 		}
 	}
 
-	/// <summary>
-	/// 현재 다이얼로그가 이 오브젝트에서 시작된 것인지 확인
-	/// DialogueSystemTrigger가 이 오브젝트에 있는지 체크
-	/// </summary>
-	private bool IsDialogueFromThisObject()
-	{
-		// DialogueSystemTrigger 컴포넌트가 이 오브젝트에 있으면 true
-		DialogueSystemTrigger trigger = GetComponent<DialogueSystemTrigger>();
-		return trigger != null;
-	}
 }
 

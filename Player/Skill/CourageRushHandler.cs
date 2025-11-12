@@ -178,10 +178,6 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 	
 	private float lastAfterimageTime = 0f;
 	
-	[Header("열 왜곡 효과")]
-	[Tooltip("열 왜곡 이펙트 프리팹 (AOE 범위에서 배경 왜곡)")]
-	[SerializeField] private GameObject heatDistortionPrefab;
-	
 	[Header("사운드 이펙트")]
 	[Tooltip("대쉬 시작 효과음")]
 	[SerializeField] private AudioClip dashStartSound;
@@ -720,23 +716,6 @@ public class CourageRushHandler : MonoBehaviour, SkillHandlerInterface
 			activeEffects.Add(aoeEffect);
 			
 			Destroy(aoeEffect, aoeDuration);
-		}
-		
-		// 4. 열 왜곡 효과 생성
-		if (heatDistortionPrefab != null)
-		{
-			GameObject distortion = Instantiate(heatDistortionPrefab, position, Quaternion.identity);
-			
-			// 크기 조정 (AOE 범위에 맞춤)
-			distortion.transform.localScale = Vector3.one * (aoeRadius * 2f);
-			
-			// 이펙트 추적 리스트에 추가
-			activeEffects.Add(distortion);
-			
-			// 열 왜곡 효과는 AOE보다 조금 더 오래 유지
-			Destroy(distortion, aoeDuration + 1f);
-			
-			Debug.Log("[CourageRush] 열 왜곡 효과 생성");
 		}
 	}
 	
