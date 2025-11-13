@@ -22,7 +22,7 @@ public partial class BossController : EntityController
 	[SerializeField, Tooltip("보스 사망 시 재생할 다이얼로그 제목 (비워두면 다이얼로그 없이 바로 씬 전환)")] 
 	private string bossDeathDialogue = "";
 	[SerializeField, Tooltip("보스 사망 후 로드할 씬 이름 (비워두면 로드하지 않음)")] 
-	private string gameClearSceneName = "GameClear";
+	private string gameClearSceneName = "GameClear Real";
 	[SerializeField, Tooltip("다이얼로그 없이 씬 전환할 경우의 지연 시간(초)")] 
 	private float gameClearLoadDelay = 2f;
 	#endregion

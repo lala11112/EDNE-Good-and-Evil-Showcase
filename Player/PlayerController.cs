@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using Com.LuisPedroFonseca.ProCamera2D;
 
 [RequireComponent(typeof(Rigidbody2D))]
@@ -75,6 +76,10 @@ public class PlayerController : EntityController
 	// 또는 Generated C# Class를 사용하는 경우:
 	// private PlayerInputActions playerInput;
 	// private InputAction moveAction;
+
+	[Header("씬 전환 (디버그)")]
+	[Tooltip("F10 키로 이동할 타이틀 씬 이름")]
+	[SerializeField] private string titleSceneName = "TitleScene";
 
 	#endregion
 
@@ -198,6 +203,29 @@ public class PlayerController : EntityController
 
 	[Tooltip("현재 이동 방향 (8방향)")]
 	[SerializeField] private MoveDirection currentMoveDirection = MoveDirection.None;
+
+	#endregion
+
+	#region 런타임 상태 - God Mode (디버그)
+
+	[Header("God Mode (디버그 전용)")]
+	[Tooltip("God Mode 활성화 여부 (F9 키로 토글)")]
+	[SerializeField] private bool isGodModeActive = false;
+
+	/// <summary>
+	/// God Mode 이전의 Collider 설정 저장용
+	/// </summary>
+	private bool originalIsTrigger = false;
+
+	/// <summary>
+	/// 디버그 로그 출력 간격 타이머
+	/// </summary>
+	private float debugLogTimer = 0f;
+
+	/// <summary>
+	/// 디버그 로그 출력 간격 (초)
+	/// </summary>
+	private const float DEBUG_LOG_INTERVAL = 0.5f;
 
 	#endregion
 	
@@ -456,6 +484,12 @@ public class PlayerController : EntityController
 	{
 		base.Update(); // EntityController의 상태효과 업데이트
 
+		// ⭐ God Mode 입력 처리 (F9 키 - 디버그 전용)
+		UpdateGodModeInput();
+		
+		// ⭐ 타이틀 씬 이동 입력 처리 (F10 키 - 디버그 전용)
+		UpdateTitleSceneInput();
+
 		// 정신력 자동 회복
 		UpdateMentalPowerRegeneration(Time.deltaTime);
 
@@ -473,6 +507,19 @@ public class PlayerController : EntityController
 
 		// ⭐ S랭크 궁극기 버프 업데이트
 		UpdateUltimateBuff(Time.deltaTime);
+		
+		// ⭐ God Mode: 정신력 최대치 유지
+		if (isGodModeActive)
+		{
+			if (currentMentalPower < maxMentalPower)
+			{
+				currentMentalPower = maxMentalPower;
+				PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+			}
+		}
+		
+		// ⭐ 디버그: 현재 이동속도 표시 (0.5초마다)
+		UpdateDebugSpeedLog(Time.deltaTime);
 	}
 
 	private void FixedUpdate()
@@ -2776,6 +2823,24 @@ public class PlayerController : EntityController
 		RestoreMentalPower(maxMentalPower);
 	}
 
+	/// <summary>
+	/// 테스트용 God Mode 토글 (임시)
+	/// </summary>
+	[ContextMenu("디버그: God Mode 토글 (F9)")]
+	private void DebugToggleGodMode()
+	{
+		ToggleGodMode();
+	}
+
+	/// <summary>
+	/// 테스트용 타이틀 씬 이동 (임시)
+	/// </summary>
+	[ContextMenu("디버그: 타이틀 씬으로 이동 (F10)")]
+	private void DebugLoadTitleScene()
+	{
+		LoadTitleScene();
+	}
+
 	#endregion
 
 	#region 아이템 상호작용 시스템
@@ -2859,6 +2924,189 @@ public class PlayerController : EntityController
 		if (item == null) return;
 
 		nearbyItems.Remove(item);
+	}
+
+	#endregion
+
+	#region God Mode (디버그 전용)
+
+	/// <summary>
+	/// God Mode 입력 처리 (F9 키)
+	/// </summary>
+	private void UpdateGodModeInput()
+	{
+		// F9 키 입력 감지 (Unity Input System의 Keyboard 클래스 사용)
+		if (UnityEngine.InputSystem.Keyboard.current != null && 
+		    UnityEngine.InputSystem.Keyboard.current.f9Key.wasPressedThisFrame)
+		{
+			ToggleGodMode();
+		}
+	}
+	
+	/// <summary>
+	/// 타이틀 씬 이동 입력 처리 (F10 키)
+	/// </summary>
+	private void UpdateTitleSceneInput()
+	{
+		// F10 키 입력 감지 (Unity Input System의 Keyboard 클래스 사용)
+		if (UnityEngine.InputSystem.Keyboard.current != null && 
+		    UnityEngine.InputSystem.Keyboard.current.f10Key.wasPressedThisFrame)
+		{
+			LoadTitleScene();
+		}
+	}
+
+	/// <summary>
+	/// God Mode 토글 (켜기/끄기)
+	/// F9 키를 누르면 호출되어 God Mode를 켜거나 끕니다.
+	/// </summary>
+	private void ToggleGodMode()
+	{
+		isGodModeActive = !isGodModeActive;
+
+		if (isGodModeActive)
+		{
+			// God Mode 활성화
+			ActivateGodMode();
+		}
+		else
+		{
+			// God Mode 비활성화
+			DeactivateGodMode();
+		}
+	}
+
+	/// <summary>
+	/// God Mode 활성화
+	/// </summary>
+	private void ActivateGodMode()
+	{
+		// 1. Collider2D의 isTrigger를 true로 설정 (벽/몬스터 충돌 무시)
+		Collider2D col = GetComponent<Collider2D>();
+		if (col != null)
+		{
+			originalIsTrigger = col.isTrigger; // 원래 설정 저장
+			col.isTrigger = true;
+		}
+
+		// 2. 무적 상태 설정 (EntityController의 무적 기능 활용)
+		SetInvincible(true);
+
+		// 3. 체력 및 정신력 최대치로 회복
+		currentHealth = MaxHealth;
+		currentMentalPower = maxMentalPower;
+
+		// 4. UI 업데이트
+		PlayerStatusEvents.InvokeHealthChanged(currentHealth, MaxHealth);
+		PlayerStatusEvents.InvokeMentalPowerChanged(currentMentalPower, maxMentalPower);
+
+#if UNITY_EDITOR
+		Debug.Log($"[PlayerController] 🔥 God Mode 활성화!\n" +
+		          $"  - 벽/몬스터 충돌 무시 (isTrigger = true)\n" +
+		          $"  - 무적 상태 (데미지 받지 않음)\n" +
+		          $"  - 정신력 무한 (최대치 유지)\n" +
+		          $"  - F9 키를 다시 눌러 비활성화");
+#endif
+	}
+
+	/// <summary>
+	/// God Mode 비활성화
+	/// </summary>
+	private void DeactivateGodMode()
+	{
+		// 1. Collider2D의 isTrigger를 원래 설정으로 복구
+		Collider2D col = GetComponent<Collider2D>();
+		if (col != null)
+		{
+			col.isTrigger = originalIsTrigger;
+		}
+
+		// 2. 무적 상태 해제
+		SetInvincible(false);
+
+#if UNITY_EDITOR
+		Debug.Log($"[PlayerController] ❌ God Mode 비활성화\n" +
+		          $"  - 벽/몬스터 충돌 활성화 (isTrigger = {originalIsTrigger})\n" +
+		          $"  - 무적 해제\n" +
+		          $"  - 정신력 자동 회복으로 복귀");
+#endif
+	}
+
+	/// <summary>
+	/// God Mode 활성화 여부 (외부 접근용)
+	/// </summary>
+	public bool IsGodModeActive()
+	{
+		return isGodModeActive;
+	}
+
+	/// <summary>
+	/// 타이틀 씬으로 이동
+	/// F10 키를 누르면 호출되어 타이틀 씬으로 돌아갑니다.
+	/// </summary>
+	private void LoadTitleScene()
+	{
+		// 씬 이름이 비어있으면 무시
+		if (string.IsNullOrEmpty(titleSceneName))
+		{
+#if UNITY_EDITOR
+			Debug.LogWarning("[PlayerController] ⚠️ 타이틀 씬 이름이 설정되지 않았습니다! Inspector에서 titleSceneName을 설정해주세요.");
+#endif
+			return;
+		}
+
+#if UNITY_EDITOR
+		Debug.Log($"[PlayerController] 🏠 타이틀 씬으로 이동: {titleSceneName}");
+#endif
+
+		// 씬 전환 (비동기 로드 - 부드러운 전환)
+		SceneManager.LoadScene(titleSceneName);
+	}
+
+	/// <summary>
+	/// 디버그: 현재 이동속도 로그 출력 (0.5초마다)
+	/// </summary>
+	private void UpdateDebugSpeedLog(float deltaTime)
+	{
+#if UNITY_EDITOR
+		// 타이머 업데이트
+		debugLogTimer += deltaTime;
+
+		// 0.5초마다 한 번씩 로그 출력
+		if (debugLogTimer >= DEBUG_LOG_INTERVAL)
+		{
+			debugLogTimer = 0f;
+
+			// 현재 이동속도 계산
+			float currentSpeed = GetCurrentMoveSpeed();
+			
+			// 실제 Rigidbody2D velocity
+			Vector2 currentVelocity = rb != null ? rb.linearVelocity : Vector2.zero;
+			float actualSpeed = currentVelocity.magnitude;
+
+			// 이동 상태 확인
+			bool moving = IsMoving();
+			
+			// 상태효과 배율
+			float speedMultiplier = GetMoveSpeedMultiplier();
+			
+			// 기본 이동속도
+			float baseSpeed = playerData != null ? playerData.moveSpeed : 0f;
+
+			// 로그 출력 (이동 중일 때만)
+			if (moving)
+			{
+				Debug.Log($"[PlayerController] 🏃 이동속도 디버그\n" +
+				          $"  - 계산된 이동속도: {currentSpeed:F2} (기본: {baseSpeed:F2} × 배율: {speedMultiplier:F2})\n" +
+				          $"  - 실제 Velocity: {actualSpeed:F2} (X: {currentVelocity.x:F2}, Y: {currentVelocity.y:F2})\n" +
+				          $"  - 이동 방향: {currentMoveDirection}\n" +
+				          $"  - 입력 벡터: ({moveInput.x:F2}, {moveInput.y:F2})\n" +
+				          $"  - 넉백 중: {isKnockedBack}" +
+				          (isGodModeActive ? " [God Mode 활성화]" : "") +
+				          (isUltimateBuffActive ? $" [궁극기 버프 {playerData.ultimateBuffMoveSpeedMultiplier:F1}배]" : ""));
+			}
+		}
+#endif
 	}
 
 	#endregion
