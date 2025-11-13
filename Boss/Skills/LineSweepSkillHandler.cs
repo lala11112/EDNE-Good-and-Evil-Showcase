@@ -66,9 +66,6 @@ public class LineSweepSkillHandler : MonoBehaviour, SkillHandlerInterface
 	[Tooltip("히트박스 가이드(바) 색상")] 
 	[SerializeField] private Color hitboxGuideColor = new Color(1f, 1f, 0f, 0.9f);
 
-
-
-
     [Header("Fallback Bar (telegraphBarPrefab이 null일 때)")]
     [Tooltip("Fallback 바 색상")]
     [SerializeField] private Color fallbackBarColor = new Color(1f, 0.1f, 0.1f, 0.9f);
