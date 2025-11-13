@@ -25,6 +25,16 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
     [Tooltip("플레이어와의 충돌 판정 반경 (거리 기반)")]
     [SerializeField] private float hitRadius = 0.6f;
 
+    [Header("벽 충돌 감지")]
+    [Tooltip("벽 충돌 감지 여부 (활성화하면 벽을 통과하지 않음)")]
+    [SerializeField] private bool enableWallCollision = true;
+    [Tooltip("벽으로 인식할 레이어 마스크 (예: Wall, Obstacle 등)")]
+    [SerializeField] private LayerMask wallLayer = -1;
+    [Tooltip("벽 감지용 충돌 반경 (몬스터 크기보다 약간 크게 설정)")]
+    [SerializeField] private float wallCheckRadius = 0.5f;
+    [Tooltip("벽 감지 거리 (한 프레임에 이동할 거리보다 약간 크게)")]
+    [SerializeField] private float wallCheckDistance = 0.2f;
+
     [Header("대시 거리")]
     [Tooltip("고정 대시 거리 사용 여부 (켜면 대시 거리를 명확히 지정)")]
     [SerializeField] private bool useFixedDashDistance = false;
@@ -223,6 +233,15 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
 			Vector3 current = ownerController.transform.position;
 			float step = dashSpeed * Time.fixedDeltaTime;
 			Vector3 nextPos = Vector3.MoveTowards(current, plannedDashEnd, step);
+
+			// 벽 충돌 감지: 이동하기 전에 벽이 있는지 체크
+			if (enableWallCollision && CheckWallCollision(current, nextPos))
+			{
+				Debug.Log("[DashHandler] 벽에 부딪혀 대시를 중단합니다.");
+				break;
+			}
+
+			// 이동 실행
 			if (rb2d != null)
 			{
 				rb2d.MovePosition(new Vector2(nextPos.x, nextPos.y));
@@ -324,6 +343,50 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
     }
     
     #endregion
+
+    #region 벽 충돌 감지
+    
+    /// <summary>
+    /// 현재 위치에서 다음 위치로 이동할 때 벽과 충돌하는지 확인합니다.
+    /// CircleCast를 사용하여 몬스터의 크기를 고려한 충돌 감지를 수행합니다.
+    /// </summary>
+    /// <param name="currentPos">현재 위치</param>
+    /// <param name="nextPos">이동할 위치</param>
+    /// <returns>벽과 충돌하면 true, 아니면 false</returns>
+    private bool CheckWallCollision(Vector3 currentPos, Vector3 nextPos)
+    {
+        // 이동 방향과 거리 계산
+        Vector2 direction = (nextPos - currentPos).normalized;
+        float distance = Vector3.Distance(currentPos, nextPos);
+        
+        // 이동 거리가 너무 작으면 체크하지 않음
+        if (distance < 0.001f)
+        {
+            return false;
+        }
+        
+        // CircleCast로 경로상의 벽 감지
+        // 시작점에서 wallCheckRadius 반경의 원을 이동 방향으로 쏘아 벽을 감지합니다
+        RaycastHit2D hit = Physics2D.CircleCast(
+            currentPos, 
+            wallCheckRadius, 
+            direction, 
+            distance + wallCheckDistance, 
+            wallLayer
+        );
+        
+        if (hit.collider != null)
+        {
+            Debug.Log($"[DashHandler] 벽 감지됨: {hit.collider.name} (거리: {hit.distance:F2})");
+            return true;
+        }
+        
+        return false;
+    }
+    
+    #endregion
+    
+    #region 시각적 효과
     
     /// <summary>
     /// 대시 경로를 표시하는 임시 직사각형 스프라이트 생성
@@ -365,4 +428,6 @@ public class DashHandler : MonoBehaviour, SkillHandlerInterface
         
         return telegraph;
     }
+    
+    #endregion
 }
