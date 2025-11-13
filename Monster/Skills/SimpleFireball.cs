@@ -41,6 +41,14 @@ public class SimpleFireball : MonoBehaviour, ISkillProjectile
 	[SerializeField] private bool idleCircleScaleOverride = false;
 	[Tooltip("정지 VFX에만 적용할 CircleCollider2D 지름 배수 (1=동일)")]
 	[SerializeField] private float idleCircleScaleMultiplier = 1f;
+
+	[Header("SFX")]
+	[Tooltip("파이어볼이 이동하기 시작할 때 재생할 효과음")]
+	[SerializeField] private AudioClip moveStartSfx;
+	[Range(0f, 2f)]
+	[SerializeField] private float moveStartSfxVolume = 1f;
+	[Tooltip("효과음을 2D로 재생하여 거리 감쇠를 제거합니다")]
+	[SerializeField] private bool moveStartSfx2D = true;
     
     private float damage;
     private float speed;
@@ -215,6 +223,13 @@ public class SimpleFireball : MonoBehaviour, ISkillProjectile
 		// 이동/정지 상태에 따라 VFX 토글
 		UpdateActiveVFX();
 
+		// 이동 시작 시 효과음 재생
+		if (!_hasPlayedMoveSound && _rb2d != null && _rb2d.linearVelocity.sqrMagnitude > 0.0001f)
+		{
+			_hasPlayedMoveSound = true;
+			PlayMoveStartSound();
+		}
+
 		if (!orientVFXToVelocity || _vfxPivot == null) return;
 
 		Vector2 dirWorld;
@@ -236,11 +251,34 @@ public class SimpleFireball : MonoBehaviour, ISkillProjectile
 		_vfxPivot.localRotation = Quaternion.FromToRotation(fwd, localDir);
 	}
 
+	private void PlayMoveStartSound()
+	{
+		if (moveStartSfx == null) return;
+
+		if (moveStartSfx2D)
+		{
+			// 2D 사운드: 거리 감쇠 없음
+			var tempAudioSource = gameObject.AddComponent<AudioSource>();
+			tempAudioSource.clip = moveStartSfx;
+			tempAudioSource.volume = moveStartSfxVolume;
+			tempAudioSource.spatialBlend = 0f; // 2D
+			tempAudioSource.playOnAwake = false;
+			tempAudioSource.Play();
+			Destroy(tempAudioSource, moveStartSfx.length + 0.1f);
+		}
+		else
+		{
+			// 3D 사운드: 위치 기반
+			AudioSource.PlayClipAtPoint(moveStartSfx, transform.position, moveStartSfxVolume);
+		}
+	}
+
 	// private state for orientation
 	private Transform _vfxPivot;
 	private GameObject _vfxObject;
 	private GameObject _idleVfxObject;
 	private Rigidbody2D _rb2d;
+	private bool _hasPlayedMoveSound = false;
 
 	private void SetupVFXObject(GameObject vfx)
 	{

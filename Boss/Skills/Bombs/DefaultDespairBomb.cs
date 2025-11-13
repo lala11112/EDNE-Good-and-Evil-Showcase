@@ -27,6 +27,12 @@ public class DefaultDespairBomb : MonoBehaviour, IDespairBomb
 	[Tooltip("피해를 적용할 레이어 마스크(기본값)")]
 	[SerializeField] private LayerMask defaultDamageLayerMask;
 
+	[Header("몬스터 소환")]
+	[Tooltip("폭발 범위 가운데에서 소환할 몬스터 프리팹")]
+	[SerializeField] private GameObject monsterPrefab;
+	[Tooltip("몬스터 소환 시 Y축 오프셋 (지면 위로 올리기)")]
+	[SerializeField] private float monsterSpawnYOffset = 0f;
+
 	[Header("렌더/정렬")]
 	[Tooltip("채워진 원 텍스처 해상도(픽셀). 클수록 가장자리 품질↑")]
 	[SerializeField] private int filledTextureSize = 128;
@@ -79,6 +85,9 @@ public class DefaultDespairBomb : MonoBehaviour, IDespairBomb
 
 		sr.color = activeC;
 		ApplyDamage(center, radius, damage, dmgMask, attacker);
+		
+		// 폭발 범위 가운데에서 몬스터 소환
+		SpawnMonster(center);
 
 		if (hold > 0f) yield return new WaitForSeconds(hold);
 
@@ -130,6 +139,16 @@ public class DefaultDespairBomb : MonoBehaviour, IDespairBomb
 		tex.SetPixels32(pixels);
 		tex.Apply(false, false);
 		return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s);
+	}
+
+	private void SpawnMonster(Vector2 center)
+	{
+		if (monsterPrefab == null) return;
+
+		Vector3 spawnPos = new Vector3(center.x, center.y + monsterSpawnYOffset, 0f);
+		GameObject monster = Instantiate(monsterPrefab, spawnPos, Quaternion.identity);
+		
+		Debug.Log($"[DefaultDespairBomb] 폭발 중심에서 몬스터 소환: {monster.name} at {spawnPos}");
 	}
 
 	private static void AutoScaleCircularSprite(Transform tr, float targetRadius, Sprite sprite)
