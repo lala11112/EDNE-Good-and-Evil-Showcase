@@ -17,6 +17,10 @@ public class RoomController : MonoBehaviour
     
     [Tooltip("방과 연결된 문들")]
     [SerializeField] private List<DoorController> connectedDoors = new List<DoorController>();
+    
+    [Header("오디오 설정")]
+    [Tooltip("효과음 재생용 AudioSource")]
+    [SerializeField] private AudioSource audioSource;
 
     [Header("몬스터 스포너")]
     [Tooltip("방의 몬스터 스포너들")]
@@ -105,6 +109,21 @@ public class RoomController : MonoBehaviour
         if (roomCollider == null)
         {
             roomCollider = GetComponent<Collider2D>();
+        }
+
+        // AudioSource 자동 설정
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            
+            // AudioSource가 없으면 자동으로 추가
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0f; // 2D 사운드
+                Debug.Log($"[RoomController] {roomData.roomName}에 AudioSource를 자동으로 추가했습니다.");
+            }
         }
 
         // 몬스터 스포너 자동 찾기
@@ -454,6 +473,9 @@ public class RoomController : MonoBehaviour
     {
         isRoomCleared = true;
         isRoomActive = false;
+
+        // 방 클리어 효과음 재생
+        PlayRoomClearSound();
 
         // 트랩 정지
         StopTraps();
@@ -841,5 +863,27 @@ public class RoomController : MonoBehaviour
     public RoomControllerSO GetRoomData()
     {
         return roomData;
+    }
+
+    /// <summary>
+    /// 방 클리어 효과음 재생
+    /// </summary>
+    private void PlayRoomClearSound()
+    {
+        if (roomData == null || roomData.roomClearSound == null)
+        {
+            Debug.LogWarning($"[RoomController] {roomData?.roomName ?? "Unknown"} - 방 클리어 효과음이 설정되지 않았습니다.");
+            return;
+        }
+
+        if (audioSource == null)
+        {
+            Debug.LogWarning($"[RoomController] {roomData.roomName} - AudioSource가 없어 효과음을 재생할 수 없습니다.");
+            return;
+        }
+
+        // 효과음 재생
+        audioSource.PlayOneShot(roomData.roomClearSound);
+        Debug.Log($"[RoomController] {roomData.roomName} - 방 클리어 효과음 재생!");
     }
 }

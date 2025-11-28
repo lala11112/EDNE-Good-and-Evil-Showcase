@@ -45,6 +45,9 @@ public class RoomControllerSO : ScriptableObject
     [Tooltip("방 클리어 시 다음 방으로 이동 가능")]
     public bool allowNextRoomOnClear = true;
     
+    [Tooltip("방 클리어 시 재생될 효과음")]
+    public AudioClip roomClearSound;
+    
     [Header("아이템 스폰 설정")]
     [Tooltip("방 클리어 시 스폰될 아이템 데이터 리스트")]
     public List<ItemSpawnData> itemSpawnDataList = new List<ItemSpawnData>();
